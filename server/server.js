@@ -41,6 +41,18 @@ app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
+// This data changes based on login state and must never be cached by the
+// browser or any intermediate proxy — a cached 304 here is what was causing
+// "connected: false" to stick around even after a successful login.
+app.use("/auth", (req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  next();
+});
+app.use("/api", (req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  next();
+});
+
 const io = new SocketIOServer(server, {
   cors: { origin: CLIENT_URL, credentials: true },
 });
