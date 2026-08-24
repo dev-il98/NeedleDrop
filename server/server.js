@@ -22,6 +22,20 @@ import { registerGameHandlers } from "./gameManager.js";
 const app = express();
 const server = http.createServer(app);
 const CLIENT_URL = process.env.CLIENT_URL || "http://127.0.0.1:5173";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+// Needed so secure cookies work correctly behind Railway's proxy.
+app.set("trust proxy", 1);
+
+// In production, frontend and backend live on different domains, so cookies
+// need sameSite: "none" + secure: true to survive the cross-site OAuth
+// redirect. Locally (http://127.0.0.1) that combination is blocked by
+// browsers, so we fall back to "lax" + non-secure for dev.
+const cookieOptions = {
+  httpOnly: true,
+  sameSite: IS_PRODUCTION ? "none" : "lax",
+  secure: IS_PRODUCTION,
+};
 
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
@@ -35,7 +49,7 @@ const io = new SocketIOServer(server, {
 
 app.get("/auth/login", (req, res) => {
   const stateSessionId = nanoid(); // used only as OAuth "state" for CSRF protection
-  res.cookie("oauth_state", stateSessionId, { httpOnly: true, sameSite: "lax" });
+  res.cookie("oauth_state", stateSessionId, cookieOptions);
   res.redirect(getLoginUrl(stateSessionId));
 });
 
@@ -50,25 +64,35 @@ app.get("/auth/callback", async (req, res) => {
     const tokens = await exchangeCodeForTokens(code);
     const sessionId = createSession(tokens);
     res.cookie("sid", sessionId, {
-      httpOnly: true,
-      sameSite: "lax",
+      ...cookieOptions,
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     });
-    res.redirect(`${CLIENT_URL}/host?connected=1`);
+    // Also hand the session id back via the URL as a fallback: some mobile
+    // browsers block cross-site cookies even with sameSite:none, which would
+    // silently break auth for a frontend/backend split across two domains.
+    // The client stores this in localStorage and sends it as a header.
+    res.redirect(`${CLIENT_URL}/host?connected=1&sid=${sessionId}`);
   } catch (err) {
     console.error("OAuth callback failed:", err.response?.data || err.message);
     res.redirect(`${CLIENT_URL}/host?error=token_exchange_failed`);
   }
 });
 
+// Reads the session id from a cookie (same-origin/local dev) or an
+// X-Session-Id header (cross-site production, where third-party cookies may
+// be blocked by the browser).
+function getSid(req) {
+  return req.cookies.sid || req.headers["x-session-id"] || null;
+}
+
 app.get("/auth/status", (req, res) => {
-  const sid = req.cookies.sid;
+  const sid = getSid(req);
   res.json({ connected: !!sid && hasSession(sid) });
 });
 
 // Gives the host's browser a fresh access token for the Web Playback SDK.
 app.get("/auth/token", async (req, res) => {
-  const sid = req.cookies.sid;
+  const sid = getSid(req);
   if (!sid) return res.status(401).json({ error: "Not connected to Spotify." });
   const token = await getValidAccessToken(sid);
   if (!token) return res.status(401).json({ error: "Session expired, please reconnect." });
@@ -78,7 +102,7 @@ app.get("/auth/token", async (req, res) => {
 // ---------- Spotify data ----------
 
 function requireSession(req, res, next) {
-  const sid = req.cookies.sid;
+  const sid = getSid(req);
   if (!sid || !hasSession(sid)) {
     return res.status(401).json({ error: "Not connected to Spotify." });
   }

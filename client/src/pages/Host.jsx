@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, captureSidFromUrl } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { createHostPlayer } from "../lib/spotifyPlayer";
 
-const ROUND_OPTIONS = [5, 10, 15, 20];
+const ROUND_OPTIONS = [5, 10, 15, 20, 25, 30];
 const SNIPPET_OPTIONS = [
   { seconds: 1, multiplier: "2.0x", label: "1 second — brutal" },
   { seconds: 2, multiplier: "1.5x", label: "2 seconds — hard" },
@@ -42,6 +42,7 @@ export default function Host() {
 
   // ---------- Check Spotify connection ----------
   useEffect(() => {
+    captureSidFromUrl();
     api
       .authStatus()
       .then((res) => setConnected(res.connected))

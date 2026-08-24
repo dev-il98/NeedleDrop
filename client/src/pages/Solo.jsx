@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, captureSidFromUrl } from "../lib/api";
 import { createHostPlayer } from "../lib/spotifyPlayer";
 import { isCorrectGuess, scoreForElapsed, difficultyMultiplier } from "../lib/matcher";
 
@@ -60,6 +60,7 @@ export default function Solo() {
 
   // ---------- Spotify connection ----------
   useEffect(() => {
+    captureSidFromUrl();
     api
       .authStatus()
       .then((res) => setConnected(res.connected))
