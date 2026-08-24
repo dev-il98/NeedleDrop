@@ -99,6 +99,10 @@ function getSid(req) {
 
 app.get("/auth/status", (req, res) => {
   const sid = getSid(req);
+  // TEMP DEBUG: confirms whether Railway is actually running this exact file.
+  // Remove once confirmed.
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.set("X-Debug-Version", "v2-test");
   res.json({ connected: !!sid && hasSession(sid) });
 });
 
