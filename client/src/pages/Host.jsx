@@ -3,7 +3,6 @@ import { useSearchParams, Link } from "react-router-dom";
 import { api, captureSidFromUrl } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { createHostPlayer } from "../lib/spotifyPlayer";
-import Turntable from "../components/Turntable.jsx";
 
 const ROUND_OPTIONS = [5, 10, 15, 20, 25, 30];
 const SNIPPET_OPTIONS = [
@@ -36,6 +35,7 @@ export default function Host() {
 
   const [phase, setPhase] = useState("setup"); // setup | lobby | round-active | guessing | reveal | ended
   const [roomCode, setRoomCode] = useState("");
+  const roomCodeRef = useRef("");
   const [players, setPlayers] = useState([]);
   const [round, setRound] = useState(null); // {roundNumber, totalRounds, track, snippetMs}
   const [reveal, setReveal] = useState(null);
@@ -78,8 +78,21 @@ export default function Host() {
       .catch((err) => setConnectError(err.message));
   }, [connected]);
 
+  // Keep a ref in sync so the persistent socket listener below always sees
+  // the latest room code without needing to re-subscribe on every change.
+  useEffect(() => {
+    roomCodeRef.current = roomCode;
+  }, [roomCode]);
+
   // ---------- Socket event wiring ----------
   useEffect(() => {
+    function onConnect() {
+      // If we already created a room and the socket reconnects (e.g. this
+      // tab was briefly backgrounded), reclaim it instead of losing it.
+      if (roomCodeRef.current) {
+        socket.emit("host:rejoin-room", { roomCode: roomCodeRef.current });
+      }
+    }
     function onPlayersUpdated(list) {
       setPlayers(list);
     }
@@ -103,6 +116,7 @@ export default function Host() {
       setPhase("ended");
     }
 
+    socket.on("connect", onConnect);
     socket.on("room:players-updated", onPlayersUpdated);
     socket.on("round:prepare", onRoundPrepare);
     socket.on("round:guessing-open", onGuessingOpen);
@@ -110,6 +124,7 @@ export default function Host() {
     socket.on("game:ended", onGameEnded);
 
     return () => {
+      socket.off("connect", onConnect);
       socket.off("room:players-updated", onPlayersUpdated);
       socket.off("round:prepare", onRoundPrepare);
       socket.off("round:guessing-open", onGuessingOpen);
@@ -372,7 +387,7 @@ export default function Host() {
           Room {roomCode} · Round {round?.roundNumber}/{round?.totalRounds}
         </div>
         <div className="card" style={{ textAlign: "center" }}>
-          <Turntable spinning={isPlayingSnippet} size={170} />
+          <div className={`vinyl ${isPlayingSnippet ? "spinning" : ""}`} />
           <h3 className="section-title">
             {isPlayingSnippet ? "Playing snippet…" : "Guessing is open"}
           </h3>

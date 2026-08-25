@@ -70,6 +70,7 @@ export function registerGameHandlers(io, socket) {
     const room = {
       code,
       hostSocketId: socket.id,
+      hostDisconnectTimer: null,
       mode: mode === "remote" ? "remote" : "local",
       tracks: shuffle(tracks),
       trackIndex: 0,
@@ -197,16 +198,42 @@ export function registerGameHandlers(io, socket) {
     }
   });
 
+  // Lets the host's browser reclaim its room after a brief disconnect (e.g.
+  // switching tabs can momentarily drop the socket) instead of losing the
+  // room entirely.
+  socket.on("host:rejoin-room", ({ roomCode }, ack) => {
+    const room = rooms.get((roomCode || "").toUpperCase());
+    if (!room) return ack?.({ ok: false, error: "Room not found." });
+
+    if (room.hostDisconnectTimer) {
+      clearTimeout(room.hostDisconnectTimer);
+      room.hostDisconnectTimer = null;
+    }
+    room.hostSocketId = socket.id;
+    socket.join(room.code);
+    socket.data.roomCode = room.code;
+    socket.data.role = "host";
+    ack?.({ ok: true, status: room.status, players: publicPlayers(room) });
+  });
+
   // ---------- Disconnect handling ----------
   socket.on("disconnect", () => {
     const code = socket.data.roomCode;
     const room = rooms.get(code);
     if (!room) return;
 
-    if (socket.data.role === "host") {
-      io.to(code).emit("room:host-disconnected");
-      clearGuessTimer(room);
-      rooms.delete(code);
+    if (socket.data.role === "host" && room.hostSocketId === socket.id) {
+      // Give the host a short grace period to reconnect (e.g. a background
+      // tab briefly dropping its socket) before actually tearing the room
+      // down — instant deletion was destroying rooms on harmless blips.
+      room.hostSocketId = null;
+      room.hostDisconnectTimer = setTimeout(() => {
+        if (!room.hostSocketId) {
+          io.to(code).emit("room:host-disconnected");
+          clearGuessTimer(room);
+          rooms.delete(code);
+        }
+      }, 30_000);
     } else if (room.players.has(socket.id)) {
       const player = room.players.get(socket.id);
       player.connected = false;
