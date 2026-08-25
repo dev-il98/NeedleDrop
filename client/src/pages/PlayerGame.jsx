@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getSocket } from "../lib/socket";
+import Turntable from "../components/Turntable.jsx";
 
 const GUESS_WINDOW_DEFAULT = 12000;
 
@@ -142,7 +143,7 @@ export default function PlayerGame() {
 
       {!error && phase === "lobby" && (
         <div className="card" style={{ textAlign: "center" }}>
-          <div className="vinyl" />
+          <Turntable size={150} />
           <h3 className="section-title">You're in!</h3>
           <p className="hint">Waiting for the host to start the game…</p>
         </div>
@@ -150,7 +151,7 @@ export default function PlayerGame() {
 
       {!error && phase === "starting" && roundInfo && (
         <div className="card" style={{ textAlign: "center" }}>
-          <div className="vinyl spinning" />
+          <Turntable spinning size={150} />
           <h3 className="section-title">
             Round {roundInfo.roundNumber} / {roundInfo.totalRounds}
           </h3>

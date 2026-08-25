@@ -3,6 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { api, captureSidFromUrl } from "../lib/api";
 import { createHostPlayer } from "../lib/spotifyPlayer";
 import { isCorrectGuess, scoreForElapsed, difficultyMultiplier } from "../lib/matcher";
+import Turntable from "../components/Turntable.jsx";
 
 const ROUND_OPTIONS = [5, 10, 15, 20, 25, 30];
 const SNIPPET_OPTIONS = [
@@ -148,12 +149,9 @@ export default function Solo() {
           setPlayerError("Couldn't pause playback: " + err.message);
         }
         setIsPlayingSnippet(false);
-        // Pass the track explicitly instead of letting openGuessing read
-        // `currentTrack` from the component closure — that closure can be
-        // stale here because setRoundIndex() from nextRound() hasn't been
-        // applied yet when this chain was set up (React batches state
-        // updates), which was causing timeouts to reveal the previous
-        // round's track even though the correct song had just played.
+        // Track is threaded explicitly through the chain rather than read
+        // from the component closure — avoids the stale-closure bug where
+        // a timeout could reveal the previous round's track.
         openGuessing(track);
       }, snippetMs || 1000);
     } catch (err) {
@@ -174,7 +172,7 @@ export default function Solo() {
       setTimeLeftPct(pct);
       if (pct <= 0) {
         clearTimer();
-        revealRound(null, track); // reveal the exact track this round played
+        revealRound(null, track);
       }
     }, 100);
   }
@@ -352,7 +350,7 @@ export default function Solo() {
           Round {roundIndex + 1}/{gameTracks.length} · Score {score}
         </div>
         <div className="card" style={{ textAlign: "center" }}>
-          <div className="vinyl spinning" />
+          <Turntable spinning size={170} />
           <h3 className="section-title">Playing snippet…</h3>
           <p className="hint">Listen closely.</p>
         </div>

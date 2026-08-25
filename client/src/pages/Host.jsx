@@ -3,6 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { api, captureSidFromUrl } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { createHostPlayer } from "../lib/spotifyPlayer";
+import Turntable from "../components/Turntable.jsx";
 
 const ROUND_OPTIONS = [5, 10, 15, 20, 25, 30];
 const SNIPPET_OPTIONS = [
@@ -371,7 +372,7 @@ export default function Host() {
           Room {roomCode} · Round {round?.roundNumber}/{round?.totalRounds}
         </div>
         <div className="card" style={{ textAlign: "center" }}>
-          <div className={`vinyl ${isPlayingSnippet ? "spinning" : ""}`} />
+          <Turntable spinning={isPlayingSnippet} size={170} />
           <h3 className="section-title">
             {isPlayingSnippet ? "Playing snippet…" : "Guessing is open"}
           </h3>
