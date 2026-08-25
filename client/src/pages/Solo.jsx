@@ -148,7 +148,13 @@ export default function Solo() {
           setPlayerError("Couldn't pause playback: " + err.message);
         }
         setIsPlayingSnippet(false);
-        openGuessing();
+        // Pass the track explicitly instead of letting openGuessing read
+        // `currentTrack` from the component closure — that closure can be
+        // stale here because setRoundIndex() from nextRound() hasn't been
+        // applied yet when this chain was set up (React batches state
+        // updates), which was causing timeouts to reveal the previous
+        // round's track even though the correct song had just played.
+        openGuessing(track);
       }, snippetMs || 1000);
     } catch (err) {
       setIsPlayingSnippet(false);
@@ -156,7 +162,7 @@ export default function Solo() {
     }
   }
 
-  function openGuessing() {
+  function openGuessing(track) {
     setPhase("guessing");
     setGuessingOpenedAt(Date.now());
     setTimeLeftPct(100);
@@ -168,7 +174,7 @@ export default function Solo() {
       setTimeLeftPct(pct);
       if (pct <= 0) {
         clearTimer();
-        revealRound(null);
+        revealRound(null, track); // reveal the exact track this round played
       }
     }, 100);
   }
@@ -191,16 +197,16 @@ export default function Solo() {
       const points = Math.round(scoreForElapsed(elapsedMs) * difficultyMultiplier(snippetMs));
       setScore((s) => s + points);
       setFeedback({ correct: true, points });
-      revealRound(points);
+      revealRound(points, currentTrack);
     } else {
       setFeedback({ correct: false });
     }
   }
 
-  function revealRound(points) {
+  function revealRound(points, track) {
     clearTimer();
     setRevealInfo({
-      track: currentTrack,
+      track: track || currentTrack,
       gotItRight: points != null,
       points: points || 0,
     });
