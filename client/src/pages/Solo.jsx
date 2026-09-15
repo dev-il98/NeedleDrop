@@ -4,6 +4,11 @@ import { api, captureSidFromUrl } from "../lib/api";
 import { createHostPlayer } from "../lib/spotifyPlayer";
 import { isCorrectGuess, scoreForElapsed, difficultyMultiplier } from "../lib/matcher";
 import Turntable from "../components/Turntable.jsx";
+import GameHUD from "../components/GameHUD.jsx";
+import Visualizer from "../components/Visualizer.jsx";
+import RadialTimer from "../components/RadialTimer.jsx";
+import StatusScreen from "../components/StatusScreen.jsx";
+import PlaylistPicker from "../components/PlaylistPicker.jsx";
 
 const ROUND_OPTIONS = [5, 10, 15, 20, 25, 30];
 const SNIPPET_OPTIONS = [
@@ -33,6 +38,7 @@ export default function Solo() {
   const [connectError, setConnectError] = useState(params.get("error") || "");
 
   const [playlists, setPlaylists] = useState([]);
+  const [likedCount, setLikedCount] = useState(null);
   const [selectedId, setSelectedId] = useState("");
   const [tracks, setTracks] = useState([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
@@ -47,13 +53,17 @@ export default function Solo() {
   const [gameTracks, setGameTracks] = useState([]);
   const [roundIndex, setRoundIndex] = useState(0);
   const [score, setScore] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
   const [isPlayingSnippet, setIsPlayingSnippet] = useState(false);
   const [guessingOpenedAt, setGuessingOpenedAt] = useState(null);
   const [timeLeftPct, setTimeLeftPct] = useState(100);
 
   const [guess, setGuess] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const [feedback, setFeedback] = useState(null);
+  const [wrongPulse, setWrongPulse] = useState(false);
   const [revealInfo, setRevealInfo] = useState(null);
 
   const snippetMs = snippetSeconds * 1000;
@@ -90,6 +100,12 @@ export default function Solo() {
       .getPlaylists()
       .then((res) => setPlaylists(res.playlists))
       .catch((err) => setConnectError(err.message));
+    api
+      .getLikedSongsMeta()
+      .then((res) => setLikedCount(res.total))
+      .catch(() => {
+        /* non-critical — picker just omits the count if this fails */
+      });
   }, [connected]);
 
   async function selectPlaylist(id) {
@@ -113,6 +129,8 @@ export default function Solo() {
     setGameTracks(picked);
     setRoundIndex(0);
     setScore(0);
+    setStreak(0);
+    setCorrectCount(0);
     setFeedback(null);
     setGuess("");
     setRevealInfo(null);
@@ -149,9 +167,6 @@ export default function Solo() {
           setPlayerError("Couldn't pause playback: " + err.message);
         }
         setIsPlayingSnippet(false);
-        // Track is threaded explicitly through the chain rather than read
-        // from the component closure — avoids the stale-closure bug where
-        // a timeout could reveal the previous round's track.
         openGuessing(track);
       }, snippetMs || 1000);
     } catch (err) {
@@ -185,7 +200,7 @@ export default function Solo() {
   }
 
   function submitGuess(e) {
-    e.preventDefault();
+    e?.preventDefault();
     if (!guess.trim() || feedback?.correct || !currentTrack) return;
     setShowSuggestions(false);
 
@@ -198,14 +213,19 @@ export default function Solo() {
       revealRound(points, currentTrack);
     } else {
       setFeedback({ correct: false });
+      setWrongPulse(true);
+      setTimeout(() => setWrongPulse(false), 500);
     }
   }
 
   function revealRound(points, track) {
     clearTimer();
+    const gotItRight = points != null;
+    setStreak((s) => (gotItRight ? s + 1 : 0));
+    if (gotItRight) setCorrectCount((c) => c + 1);
     setRevealInfo({
       track: track || currentTrack,
-      gotItRight: points != null,
+      gotItRight,
       points: points || 0,
     });
     setPhase("reveal");
@@ -228,6 +248,7 @@ export default function Solo() {
   function selectSuggestion(name) {
     setGuess(name);
     setShowSuggestions(false);
+    setActiveSuggestion(-1);
   }
 
   const suggestions = useMemo(() => {
@@ -236,12 +257,43 @@ export default function Solo() {
     return tracks.filter((t) => t.name.toLowerCase().includes(q)).slice(0, 6);
   }, [guess, tracks]);
 
+  useEffect(() => {
+    setActiveSuggestion(-1);
+  }, [suggestions.length, guess]);
+
+  function onInputKeyDown(e) {
+    if (!showSuggestions || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveSuggestion((i) => (i + 1) % suggestions.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveSuggestion((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+    } else if (e.key === "Enter" && activeSuggestion >= 0) {
+      e.preventDefault();
+      selectSuggestion(suggestions[activeSuggestion].name);
+    } else if (e.key === "Escape") {
+      setShowSuggestions(false);
+    }
+  }
+
+  const visualizerState =
+    phase === "round-active"
+      ? "listening"
+      : phase === "guessing"
+      ? "guessing"
+      : phase === "reveal"
+      ? revealInfo?.gotItRight
+        ? "correct"
+        : "wrong"
+      : "idle";
+
   // ---------- Render ----------
 
   if (connected === null) {
     return (
       <div className="screen">
-        <p className="hint">Checking Spotify connection…</p>
+        <StatusScreen kind="loading" title="Checking Spotify connection" />
       </div>
     );
   }
@@ -249,18 +301,20 @@ export default function Solo() {
   if (!connected) {
     return (
       <div className="screen">
-        <div className="brand">
-          <span className="brand-mark">SOLO PLAY</span>
-        </div>
-        <p className="subtitle">
-          Connect your Spotify account to play by yourself — no room, no
-          friends needed. You'll need Spotify Premium for playback.
-        </p>
-        <a href={api.loginUrl()} className="btn btn-primary">
-          Connect Spotify
-        </a>
+        <div className="hero-eyebrow">Solo Play</div>
+        <h1 className="display-lg" style={{ marginBottom: 20 }}>
+          SOLO PLAY
+        </h1>
+        <StatusScreen
+          kind="empty"
+          title="Connect Spotify to play"
+          message="You'll need Spotify Premium — snippet playback uses the Web Playback SDK, which is Premium-only."
+          actions={[
+            { label: "Connect Spotify", primary: true, onClick: () => (window.location.href = api.loginUrl()) },
+          ]}
+        />
         {connectError && <p className="error-text">{connectError}</p>}
-        <Link to="/" className="hint" style={{ marginTop: 24 }}>
+        <Link to="/" className="hint cursor-target" style={{ marginTop: 12 }}>
           ← Back
         </Link>
       </div>
@@ -270,26 +324,29 @@ export default function Solo() {
   if (phase === "setup") {
     return (
       <div className="screen">
-        <div className="brand">
-          <span className="brand-mark">SOLO PLAY</span>
-        </div>
-        <p className="subtitle">Pick a playlist and tune your settings.</p>
+        <div className="hero-eyebrow">Solo Play</div>
+        <h1 className="display-lg" style={{ marginBottom: 8 }}>
+          SOLO PLAY
+        </h1>
+        <p className="subtitle" style={{ textAlign: "center", marginInline: "auto", marginBottom: 32 }}>
+          Pick a playlist and tune your settings.
+        </p>
 
         <div className="card">
           <label>Playlist</label>
-          <select value={selectedId} onChange={(e) => selectPlaylist(e.target.value)}>
-            <option value="" disabled>
-              Choose a playlist…
-            </option>
-            <option value="liked">Liked Songs</option>
-            {playlists.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.trackCount})
-              </option>
-            ))}
-          </select>
+          <PlaylistPicker
+            playlists={playlists}
+            likedCount={likedCount}
+            selectedId={selectedId}
+            onSelect={selectPlaylist}
+          />
 
-          {loadingTracks && <p className="hint" style={{ marginTop: 12 }}>Loading tracks…</p>}
+          {loadingTracks && (
+            <div className="loading-stack" style={{ marginTop: 16 }}>
+              <Turntable size={70} />
+              <p className="hint">Loading tracks…</p>
+            </div>
+          )}
           {!loadingTracks && tracks.length > 0 && (
             <p className="hint" style={{ marginTop: 12 }}>
               {tracks.length} playable tracks loaded.
@@ -325,18 +382,30 @@ export default function Solo() {
           </div>
 
           <button
-            className="btn btn-primary btn-block"
+            className="btn btn-primary btn-block cursor-target"
             style={{ marginTop: 24 }}
             disabled={!tracks.length || !deviceReady}
             onClick={startGame}
           >
-            {deviceReady ? "Start playing" : "Connecting to Spotify player…"}
+            {deviceReady ? "Start game" : "Connecting to Spotify player…"}
           </button>
           {playerError && <p className="error-text">{playerError}</p>}
-          {connectError && <p className="error-text">{connectError}</p>}
+          {connectError && (
+            <p className="error-text">
+              {connectError}{" "}
+              <button
+                type="button"
+                className="cursor-target"
+                style={{ background: "none", border: "none", color: "var(--lime)", cursor: "pointer", padding: 0 }}
+                onClick={() => selectedId && selectPlaylist(selectedId)}
+              >
+                Try again
+              </button>
+            </p>
+          )}
         </div>
 
-        <Link to="/" className="hint" style={{ marginTop: 20 }}>
+        <Link to="/" className="hint cursor-target" style={{ marginTop: 20 }}>
           ← Back
         </Link>
       </div>
@@ -345,14 +414,20 @@ export default function Solo() {
 
   if (phase === "round-active") {
     return (
-      <div className="screen">
-        <div className="badge" style={{ marginBottom: 20 }}>
-          Round {roundIndex + 1}/{gameTracks.length} · Score {score}
-        </div>
+      <div className="screen phase-blur-enter">
+        <GameHUD
+          roundNumber={roundIndex + 1}
+          totalRounds={gameTracks.length}
+          score={score}
+          streak={streak}
+        />
         <div className="card" style={{ textAlign: "center" }}>
-          <Turntable spinning size={170} />
-          <h3 className="section-title">Playing snippet…</h3>
-          <p className="hint">Listen closely.</p>
+          <div className="turntable-timer-stage">
+            <Turntable spinning size={170} />
+          </div>
+          <Visualizer state={visualizerState} />
+          <h3 className="section-title">Listening…</h3>
+          <p className="hint">The needle just dropped.</p>
         </div>
       </div>
     );
@@ -360,14 +435,21 @@ export default function Solo() {
 
   if (phase === "guessing") {
     return (
-      <div className="screen">
-        <div className="badge" style={{ marginBottom: 20 }}>
-          Round {roundIndex + 1}/{gameTracks.length} · Score {score}
+      <div className="screen phase-blur-enter">
+        <GameHUD
+          roundNumber={roundIndex + 1}
+          totalRounds={gameTracks.length}
+          score={score}
+          streak={streak}
+        />
+        <div className="turntable-timer-stage" style={{ marginBottom: 8 }}>
+          <Turntable size={140} />
+          <RadialTimer
+            pct={timeLeftPct}
+            seconds={Math.ceil((timeLeftPct / 100) * (GUESS_WINDOW_MS / 1000))}
+          />
         </div>
-        <div className="card">
-          <div className="timer-bar">
-            <div className="timer-bar-fill" style={{ width: `${timeLeftPct}%` }} />
-          </div>
+        <div className={`card${wrongPulse ? " shake" : ""}`}>
           <form onSubmit={submitGuess} autoComplete="off">
             <label htmlFor="guess">What's the song?</label>
             <div style={{ position: "relative" }}>
@@ -381,29 +463,25 @@ export default function Solo() {
                 }}
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                onKeyDown={onInputKeyDown}
                 placeholder="Start typing a song title…"
                 disabled={feedback?.correct}
                 autoFocus
+                role="combobox"
+                aria-expanded={showSuggestions && suggestions.length > 0}
+                aria-controls="solo-suggestions"
                 style={{ marginBottom: showSuggestions && suggestions.length ? 4 : 14 }}
               />
               {showSuggestions && suggestions.length > 0 && (
-                <div
-                  className="card"
-                  style={{
-                    position: "absolute",
-                    top: "100%",
-                    left: 0,
-                    right: 0,
-                    zIndex: 10,
-                    padding: 6,
-                    marginBottom: 14,
-                  }}
-                >
-                  {suggestions.map((t) => (
+                <div className="suggestion-panel" id="solo-suggestions" role="listbox">
+                  {suggestions.map((t, i) => (
                     <div
                       key={t.id}
-                      className="track-row"
+                      role="option"
+                      aria-selected={i === activeSuggestion}
+                      className={`track-row cursor-target${i === activeSuggestion ? " is-active" : ""}`}
                       onMouseDown={() => selectSuggestion(t.name)}
+                      onMouseEnter={() => setActiveSuggestion(i)}
                     >
                       {t.image && <img src={t.image} alt="" />}
                       <div className="meta">
@@ -417,14 +495,14 @@ export default function Solo() {
             </div>
             {(!showSuggestions || suggestions.length === 0) && <div style={{ marginBottom: 14 }} />}
             <button
-              className="btn btn-primary btn-block"
+              className="btn btn-primary btn-block cursor-target"
               disabled={feedback?.correct || !guess.trim()}
             >
               Submit guess
             </button>
           </form>
           {feedback && !feedback.correct && (
-            <p className="center-note" style={{ color: "#e0554f" }}>
+            <p className="center-note" style={{ color: "var(--coral)" }}>
               Not quite — try again
             </p>
           )}
@@ -435,17 +513,21 @@ export default function Solo() {
 
   if (phase === "reveal" && revealInfo) {
     return (
-      <div className="screen">
-        <div className="badge" style={{ marginBottom: 20 }}>
-          Round {roundIndex + 1}/{gameTracks.length} · Score {score}
-        </div>
+      <div className="screen phase-blur-enter">
+        <GameHUD
+          roundNumber={roundIndex + 1}
+          totalRounds={gameTracks.length}
+          score={score}
+          streak={streak}
+        />
         <div className="card">
+          <div className={`feedback-flash show-${revealInfo.gotItRight ? "correct" : "wrong"}`} />
           <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 20 }}>
             {revealInfo.track.image && (
               <img
                 src={revealInfo.track.image}
                 alt=""
-                style={{ width: 64, height: 64, borderRadius: 8 }}
+                style={{ width: 64, height: 64, borderRadius: 3 }}
               />
             )}
             <div>
@@ -455,11 +537,19 @@ export default function Solo() {
           </div>
           <p
             className="center-note"
-            style={{ color: revealInfo.gotItRight ? "#3fb8af" : "#e0554f", marginBottom: 4 }}
+            style={{
+              color: revealInfo.gotItRight ? "var(--lime)" : "var(--coral)",
+              marginBottom: 4,
+              fontWeight: 700,
+            }}
           >
             {revealInfo.gotItRight ? `Correct! +${revealInfo.points} points` : "Time's up!"}
           </p>
-          <button className="btn btn-primary btn-block" style={{ marginTop: 20 }} onClick={nextRound}>
+          <button
+            className="btn btn-primary btn-block cursor-target"
+            style={{ marginTop: 20 }}
+            onClick={nextRound}
+          >
             {roundIndex + 1 >= gameTracks.length ? "See final score" : "Next round"}
           </button>
         </div>
@@ -468,26 +558,31 @@ export default function Solo() {
   }
 
   if (phase === "ended") {
+    const accuracy = gameTracks.length ? Math.round((correctCount / gameTracks.length) * 100) : 0;
     return (
-      <div className="screen">
-        <div className="brand">
-          <span className="brand-mark">FINAL SCORE</span>
+      <div className="screen phase-blur-enter">
+        <div className="hero-eyebrow">Game complete</div>
+        <h1 className="display-lg">FINAL SCORE</h1>
+        <div className="final-score-display">{score}</div>
+        <div className="result-stats">
+          <span>
+            <strong>{correctCount}</strong>/{gameTracks.length} correct
+          </span>
+          <span>
+            <strong>{accuracy}%</strong> accuracy
+          </span>
         </div>
-        <div className="card" style={{ textAlign: "center" }}>
-          <div className="room-code-label">You scored</div>
-          <div className="room-code">{score}</div>
-          <p className="hint">
-            {gameTracks.length} rounds · {snippetSeconds}s snippets
-          </p>
-          <button
-            className="btn btn-primary btn-block"
-            style={{ marginTop: 20 }}
-            onClick={() => setPhase("setup")}
-          >
-            Play again
-          </button>
-        </div>
-        <Link to="/" className="hint" style={{ marginTop: 20 }}>
+        <p className="hint" style={{ textAlign: "center", marginBottom: 28 }}>
+          {gameTracks.length} rounds · {snippetSeconds}s snippets
+        </p>
+        <button
+          className="btn btn-primary btn-block cursor-target"
+          style={{ maxWidth: 420 }}
+          onClick={() => setPhase("setup")}
+        >
+          Play again
+        </button>
+        <Link to="/" className="hint cursor-target" style={{ marginTop: 20 }}>
           ← Back to home
         </Link>
       </div>

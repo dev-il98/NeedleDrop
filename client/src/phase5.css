@@ -1,0 +1,70 @@
+/* ==================================================================
+   NEEDLE DROP — Phase 5: final fixes
+   Import AFTER styles.css, game.css, phase3.css, phase4.css.
+   ================================================================== */
+
+/* ---------------- Anchor scroll offset (fixes #play / #how-it-works
+   landing partially under the sticky nav) ----------------
+   CSS-only per the brief's preference over a JS scroll workaround. */
+
+.section,
+.hero {
+  scroll-margin-top: 76px;
+}
+
+@media (max-width: 480px) {
+  .section,
+  .hero {
+    scroll-margin-top: 64px;
+  }
+}
+
+/* ---------------- Playlist picker: mobile scroll ---------------- */
+
+.playlist-grid {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 480px) {
+  .playlist-grid {
+    max-height: 260px;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
+}
+
+.playlist-card.is-selected .playlist-name {
+  color: var(--lime);
+}
+
+/* ---------------- Small consistency fixes ---------------- */
+
+/* Real class instead of the inline-styled "Try again" button added ad
+   hoc on Solo's setup screen — keeps future inline text-buttons
+   consistent instead of each page hand-rolling its own. */
+.inline-text-btn {
+  background: none;
+  border: none;
+  color: var(--lime);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.inline-text-btn:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+/* ---------------- Tonearm clearance inside the radial timer ring ----------------
+   The default parked angle (-24deg, game.css) is tuned for the Hero turntable,
+   which floats in open space with nothing constraining its swing. Wrapped by
+   the guessing screen's timer ring (RadialTimer.jsx, fixed 220px), that same
+   swing carries the arm past the ring's edge. Pull it in, scoped to this
+   wrapper only — doesn't touch the Hero turntable or any other instance.
+   :not(.tonearm-down) leaves the spinning/round-active state alone, since
+   that already gets its own angle from game.css's .tonearm-down rule. */
+.turntable-timer-stage .tonearm:not(.tonearm-down) {
+  transform: rotate(-18deg);
+}

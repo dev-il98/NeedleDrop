@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getSocket } from "../lib/socket";
+import StatusScreen from "../components/StatusScreen.jsx";
 
 export default function Join() {
   const navigate = useNavigate();
@@ -25,6 +26,10 @@ export default function Join() {
       (res) => {
         setJoining(false);
         if (!res.ok) {
+          // Only real server-side errors are surfaced here — "Room not
+          // found." and "This game has already ended." are the only two
+          // gameManager.js actually returns. There is no room-capacity
+          // limit in the backend, so no "room full" state is shown.
           setError(res.error || "Couldn't join that room.");
           return;
         }
@@ -39,12 +44,43 @@ export default function Join() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="screen">
+        <div className="hero-eyebrow">Join Game</div>
+        <h1 className="display-lg" style={{ marginBottom: 20 }}>
+          JOIN GAME
+        </h1>
+        <StatusScreen
+          kind="error"
+          title="Couldn't join that room"
+          message={error}
+          actions={[
+            { label: "Try again", primary: true, onClick: () => setError("") },
+            { label: "Back home", onClick: () => navigate("/") },
+          ]}
+        />
+      </div>
+    );
+  }
+
+  if (joining) {
+    return (
+      <div className="screen">
+        <StatusScreen kind="loading" title="Joining room…" />
+      </div>
+    );
+  }
+
   return (
     <div className="screen">
-      <div className="brand">
-        <span className="brand-mark">JOIN GAME</span>
-      </div>
-      <p className="subtitle">Ask your host for the 4-letter room code.</p>
+      <div className="hero-eyebrow">Join Game</div>
+      <h1 className="display-lg" style={{ marginBottom: 8 }}>
+        JOIN GAME
+      </h1>
+      <p className="subtitle" style={{ textAlign: "center", marginInline: "auto", marginBottom: 32 }}>
+        Ask your host for the 4-letter room code.
+      </p>
 
       <form className="card" onSubmit={handleJoin}>
         <label htmlFor="code">Room code</label>
@@ -68,13 +104,12 @@ export default function Join() {
           maxLength={20}
           style={{ marginBottom: 20 }}
         />
-        <button className="btn btn-primary btn-block" disabled={joining}>
-          {joining ? "Joining…" : "Join room"}
+        <button className="btn btn-primary btn-block cursor-target" disabled={joining}>
+          Join room
         </button>
-        {error && <p className="error-text">{error}</p>}
       </form>
 
-      <Link to="/" className="hint" style={{ marginTop: 20 }}>
+      <Link to="/" className="hint cursor-target" style={{ marginTop: 20 }}>
         ← Back
       </Link>
     </div>

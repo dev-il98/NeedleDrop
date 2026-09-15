@@ -1,0 +1,234 @@
+/* ==================================================================
+   NEEDLE DROP — Phase 3: physical depth, environment, motion polish
+   Import AFTER styles.css and game.css.
+   (Phase 5 cleanup: removed a duplicate .round-transition-enter /
+   @keyframes round-fade-in — game.css already defines these; having
+   both here silently overrode game.css's timing with no visible
+   difference, which is exactly the kind of dead CSS to cut.)
+   ================================================================== */
+
+/* ---------------- Turntable: deeper physical presence ---------------- */
+
+.turntable-parallax {
+  transform: rotateX(calc(14deg + var(--py, 0) * -20deg)) rotateY(calc(var(--px, 0) * 32deg));
+}
+
+.turntable-rings {
+  position: absolute;
+  inset: -60%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.sound-ring {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border: 1px solid var(--lime-glow);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.platter.spinning ~ .turntable-rings .sound-ring {
+  animation: sound-ring-expand 2.6s ease-out infinite;
+}
+
+.platter.spinning ~ .turntable-rings .sound-ring:nth-child(2) {
+  animation-delay: 1.3s;
+}
+
+@keyframes sound-ring-expand {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.35;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+.platter-sheen {
+  animation: sheen-drift 9s ease-in-out infinite alternate;
+}
+
+@keyframes sheen-drift {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------------- Radial timer ---------------- */
+
+.radial-timer {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  pointer-events: none;
+}
+
+.radial-timer-arc {
+  transition: stroke-dashoffset 0.1s linear;
+  filter: drop-shadow(0 0 6px var(--lime-glow));
+}
+
+.radial-timer-readout {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  transform: translateY(calc(var(--tt-size, 160px) / 2 + 14px));
+}
+
+.turntable-timer-stage {
+  position: relative;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+/* ---------------- Lab environment touches ---------------- */
+
+.lab-meta {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  color: var(--muted-dim);
+  text-transform: uppercase;
+  margin-top: 10px;
+}
+
+/* ---------------- Autocomplete: integrated, not default-HTML ---------------- */
+
+.suggestion-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 6px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  animation: round-fade-in 0.15s var(--ease-out);
+}
+
+.track-row.is-active {
+  background: var(--bg-2);
+  border-color: var(--lime-dim);
+}
+
+.track-row.is-active .meta .name {
+  color: var(--lime);
+}
+
+/* ---------------- Cursor states ---------------- */
+
+.custom-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  border: 1px solid var(--lime);
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  transition: width 0.18s var(--ease-out), height 0.18s var(--ease-out),
+    background 0.18s ease, border-color 0.18s ease;
+  mix-blend-mode: difference;
+}
+
+.custom-cursor.cursor-interactive {
+  width: 30px;
+  height: 30px;
+  background: var(--lime-glow);
+}
+
+.custom-cursor.cursor-button {
+  width: 46px;
+  height: 46px;
+  background: var(--lime);
+  mix-blend-mode: normal;
+  border-color: transparent;
+}
+
+.custom-cursor.cursor-play {
+  width: 60px;
+  height: 60px;
+  border-width: 1px;
+  background: transparent;
+  border-color: var(--lime);
+}
+
+/* ---------------- Cinematic phase transitions ---------------- */
+
+.phase-blur-enter {
+  animation: phase-blur-in 0.4s var(--ease-out);
+}
+
+@keyframes phase-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+/* ---------------- Mobile audit: 320–430px ---------------- */
+
+@media (max-width: 430px) {
+  .hud {
+    padding: 11px 14px;
+    gap: 6px;
+  }
+  .hud-label {
+    font-size: 0.56rem;
+  }
+  .hud-value {
+    font-size: 0.92rem;
+  }
+  .section {
+    padding: 64px 18px;
+  }
+  .step-cell,
+  .feature-cell {
+    padding: 24px 20px;
+  }
+  .preview-frame {
+    padding: 32px 18px;
+  }
+  .radial-timer-readout {
+    font-size: 0.66rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .hero-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .hero-actions .btn {
+    width: 100%;
+  }
+  .hud {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px;
+  }
+}
