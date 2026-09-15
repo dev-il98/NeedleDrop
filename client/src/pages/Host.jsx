@@ -1,96 +1,175 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
+
 import { api, captureSidFromUrl } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { createHostPlayer } from "../lib/spotifyPlayer";
-import Turntable from "../components/Turntable.jsx";
-import GameHUD from "../components/GameHUD.jsx";
-import Visualizer from "../components/Visualizer.jsx";
-import RadialTimer from "../components/RadialTimer.jsx";
-import StatusScreen from "../components/StatusScreen.jsx";
-import PlaylistPicker from "../components/PlaylistPicker.jsx";
+
 import ConnectionBadge from "../components/ConnectionBadge.jsx";
+import PlaylistPicker from "../components/PlaylistPicker.jsx";
+
+import StudioScene from "../components/StudioScene";
+import StudioTurntable from "../components/StudioTurntable";
+import StudioHUD from "../components/StudioHUD";
+import StudioWaveform from "../components/StudioWaveform";
 
 const ROUND_OPTIONS = [5, 10, 15, 20, 25, 30];
+
 const SNIPPET_OPTIONS = [
-  { seconds: 1, multiplier: "2.0x", label: "1 second — brutal" },
-  { seconds: 2, multiplier: "1.5x", label: "2 seconds — hard" },
-  { seconds: 3, multiplier: "1.2x", label: "3 seconds — medium" },
-  { seconds: 5, multiplier: "1.0x", label: "5 seconds — easy" },
-  { seconds: 10, multiplier: "0.7x", label: "10 seconds — very easy" },
+  {
+    seconds: 1,
+    multiplier: "2.0x",
+    label: "1 second — brutal",
+  },
+  {
+    seconds: 2,
+    multiplier: "1.5x",
+    label: "2 seconds — hard",
+  },
+  {
+    seconds: 3,
+    multiplier: "1.2x",
+    label: "3 seconds — medium",
+  },
+  {
+    seconds: 5,
+    multiplier: "1.0x",
+    label: "5 seconds — easy",
+  },
+  {
+    seconds: 10,
+    multiplier: "0.7x",
+    label: "10 seconds — very easy",
+  },
 ];
 
 export default function Host() {
   const [params] = useSearchParams();
+
   const socket = getSocket();
+
   const deviceIdRef = useRef(null);
   const timerRef = useRef(null);
 
-  const [connected, setConnected] = useState(null); // null = loading
-  const [connectError, setConnectError] = useState(params.get("error") || "");
+  const [connected, setConnected] = useState(null);
+  const [connectError, setConnectError] = useState(
+    params.get("error") || ""
+  );
 
   const [playlists, setPlaylists] = useState([]);
   const [likedCount, setLikedCount] = useState(null);
+
   const [selectedId, setSelectedId] = useState("");
   const [tracks, setTracks] = useState([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
 
   const [mode, setMode] = useState("local");
+
   const [totalRounds, setTotalRounds] = useState(10);
   const [snippetSeconds, setSnippetSeconds] = useState(1);
 
   const [deviceReady, setDeviceReady] = useState(false);
   const [playerError, setPlayerError] = useState("");
 
-  const [phase, setPhase] = useState("setup"); // setup | lobby | round-active | guessing | reveal | ended
+  const [phase, setPhase] = useState("setup");
+
   const [roomCode, setRoomCode] = useState("");
   const [players, setPlayers] = useState([]);
-  const [round, setRound] = useState(null); // {roundNumber, totalRounds, track, snippetMs}
-  const [reveal, setReveal] = useState(null);
-  const [isPlayingSnippet, setIsPlayingSnippet] = useState(false);
-  const [timeLeftPct, setTimeLeftPct] = useState(100);
-  const [guessWindowMs, setGuessWindowMs] = useState(12000);
 
-  // ---------- Check Spotify connection ----------
+  const [round, setRound] = useState(null);
+  const [reveal, setReveal] = useState(null);
+
+  const [isPlayingSnippet, setIsPlayingSnippet] =
+    useState(false);
+
+  const [timeLeftPct, setTimeLeftPct] = useState(100);
+  const [guessWindowMs, setGuessWindowMs] =
+    useState(12000);
+
+  /*
+   * =========================================================
+   * SPOTIFY CONNECTION
+   * =========================================================
+   */
+
   useEffect(() => {
     captureSidFromUrl();
+
     api
       .authStatus()
-      .then((res) => setConnected(res.connected))
-      .catch(() => setConnected(false));
+      .then((res) => {
+        setConnected(res.connected);
+      })
+      .catch(() => {
+        setConnected(false);
+      });
   }, []);
 
-  // ---------- Set up the Web Playback SDK once connected ----------
+  /*
+   * =========================================================
+   * SPOTIFY PLAYER
+   * =========================================================
+   */
+
   useEffect(() => {
     if (!connected) return;
+
     let cancelled = false;
 
     createHostPlayer({
       onReady: (deviceId) => {
         if (cancelled) return;
+
         deviceIdRef.current = deviceId;
         setDeviceReady(true);
       },
-      onError: (msg) => setPlayerError(msg),
-    }).catch((err) => setPlayerError(err.message || "Failed to load Spotify player."));
+
+      onError: (msg) => {
+        setPlayerError(msg);
+      },
+    }).catch((err) => {
+      setPlayerError(
+        err.message ||
+          "Failed to load Spotify player."
+      );
+    });
 
     return () => {
       cancelled = true;
     };
   }, [connected]);
 
-  // ---------- Load playlists once connected ----------
+  /*
+   * =========================================================
+   * LOAD PLAYLISTS
+   * =========================================================
+   */
+
   useEffect(() => {
     if (!connected) return;
+
     api
       .getPlaylists()
-      .then((res) => setPlaylists(res.playlists))
-      .catch((err) => setConnectError(err.message));
+      .then((res) => {
+        setPlaylists(res.playlists);
+      })
+      .catch((err) => {
+        setConnectError(err.message);
+      });
+
     api
       .getLikedSongsMeta()
-      .then((res) => setLikedCount(res.total))
+      .then((res) => {
+        setLikedCount(res.total);
+      })
       .catch(() => {});
   }, [connected]);
+
+  /*
+   * =========================================================
+   * TIMER
+   * =========================================================
+   */
 
   function clearGuessTimer() {
     if (timerRef.current) {
@@ -102,72 +181,165 @@ export default function Host() {
   function startGuessTimer(durationMs) {
     setGuessWindowMs(durationMs);
     setTimeLeftPct(100);
+
     const start = Date.now();
+
     clearGuessTimer();
+
     timerRef.current = setInterval(() => {
       const elapsed = Date.now() - start;
-      const pct = Math.max(0, 100 - (elapsed / durationMs) * 100);
+
+      const pct = Math.max(
+        0,
+        100 -
+          (elapsed / durationMs) * 100
+      );
+
       setTimeLeftPct(pct);
-      if (pct <= 0) clearGuessTimer();
+
+      if (pct <= 0) {
+        clearGuessTimer();
+      }
     }, 100);
   }
 
-  // ---------- Socket event wiring ----------
+  /*
+   * =========================================================
+   * SOCKET EVENTS
+   * =========================================================
+   */
+
   useEffect(() => {
     function onPlayersUpdated(list) {
       setPlayers(list);
     }
+
     function onRoundPrepare(payload) {
       setRound(payload);
       setPhase("round-active");
       setReveal(null);
-      playSnippet(payload.track, payload.snippetMs);
+
+      playSnippet(
+        payload.track,
+        payload.snippetMs
+      );
     }
+
     function onGuessingOpen(info) {
       setPhase("guessing");
-      setRound((r) => (r ? { ...r, ...info } : info));
-      startGuessTimer(info.guessWindowMs || 12000);
+
+      setRound((r) =>
+        r
+          ? {
+              ...r,
+              ...info,
+            }
+          : info
+      );
+
+      startGuessTimer(
+        info.guessWindowMs || 12000
+      );
     }
+
     function onReveal(payload) {
       clearGuessTimer();
+
       setReveal(payload);
       setPlayers(payload.players);
       setPhase("reveal");
     }
+
     function onGameEnded(payload) {
       clearGuessTimer();
+
       setPlayers(payload.players);
       setPhase("ended");
     }
 
-    socket.on("room:players-updated", onPlayersUpdated);
-    socket.on("round:prepare", onRoundPrepare);
-    socket.on("round:guessing-open", onGuessingOpen);
-    socket.on("round:reveal", onReveal);
-    socket.on("game:ended", onGameEnded);
+    socket.on(
+      "room:players-updated",
+      onPlayersUpdated
+    );
+
+    socket.on(
+      "round:prepare",
+      onRoundPrepare
+    );
+
+    socket.on(
+      "round:guessing-open",
+      onGuessingOpen
+    );
+
+    socket.on(
+      "round:reveal",
+      onReveal
+    );
+
+    socket.on(
+      "game:ended",
+      onGameEnded
+    );
 
     return () => {
-      socket.off("room:players-updated", onPlayersUpdated);
-      socket.off("round:prepare", onRoundPrepare);
-      socket.off("round:guessing-open", onGuessingOpen);
-      socket.off("round:reveal", onReveal);
-      socket.off("game:ended", onGameEnded);
+      socket.off(
+        "room:players-updated",
+        onPlayersUpdated
+      );
+
+      socket.off(
+        "round:prepare",
+        onRoundPrepare
+      );
+
+      socket.off(
+        "round:guessing-open",
+        onGuessingOpen
+      );
+
+      socket.off(
+        "round:reveal",
+        onReveal
+      );
+
+      socket.off(
+        "game:ended",
+        onGameEnded
+      );
+
       clearGuessTimer();
     };
+
+    // Socket instance intentionally remains stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /*
+   * =========================================================
+   * PLAYLIST
+   * =========================================================
+   */
 
   async function selectPlaylist(id) {
     setSelectedId(id);
     setTracks([]);
     setLoadingTracks(true);
+
     try {
       const res =
         id === "liked"
           ? await api.getLikedSongsTracks()
           : await api.getPlaylistTracks(id);
+
       setTracks(res.tracks);
-      setTotalRounds(Math.min(10, res.tracks.length || 10));
+
+      setTotalRounds(
+        Math.min(
+          10,
+          res.tracks.length || 10
+        )
+      );
     } catch (err) {
       setConnectError(err.message);
     } finally {
@@ -175,20 +347,39 @@ export default function Host() {
     }
   }
 
+  /*
+   * =========================================================
+   * CREATE ROOM
+   * =========================================================
+   */
+
   function createRoom() {
     socket.emit(
       "host:create-room",
-      { mode, tracks, totalRounds, snippetMs: snippetSeconds * 1000 },
+      {
+        mode,
+        tracks,
+        totalRounds,
+        snippetMs:
+          snippetSeconds * 1000,
+      },
       (res) => {
         if (!res.ok) {
           setConnectError(res.error);
           return;
         }
+
         setRoomCode(res.roomCode);
         setPhase("lobby");
       }
     );
   }
+
+  /*
+   * =========================================================
+   * HOST CONTROLS
+   * =========================================================
+   */
 
   function startGame() {
     socket.emit("host:start-game");
@@ -202,329 +393,1038 @@ export default function Host() {
     socket.emit("host:reveal-now");
   }
 
-  async function playSnippet(track, snippetMs) {
+  /*
+   * =========================================================
+   * SPOTIFY PLAYBACK
+   * =========================================================
+   */
+
+  async function playSnippet(
+    track,
+    snippetMs
+  ) {
     const deviceId = deviceIdRef.current;
+
     if (!deviceId) {
-      setPlayerError("Playback device isn't ready yet — give it a second and try again.");
+      setPlayerError(
+        "Playback device isn't ready yet — give it a second and try again."
+      );
+
       return;
     }
+
     try {
       setIsPlayingSnippet(true);
-      const { accessToken } = await api.getToken();
-      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ uris: [track.uri] }),
-      });
+
+      const { accessToken } =
+        await api.getToken();
+
+      await fetch(
+        `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`,
+        {
+          method: "PUT",
+
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            uris: [track.uri],
+          }),
+        }
+      );
 
       setTimeout(async () => {
         try {
-          const { accessToken: freshToken } = await api.getToken();
-          await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceId}`, {
-            method: "PUT",
-            headers: { Authorization: `Bearer ${freshToken}` },
-          });
+          const {
+            accessToken: freshToken,
+          } = await api.getToken();
+
+          await fetch(
+            `https://api.spotify.com/v1/me/player/pause?device_id=${deviceId}`,
+            {
+              method: "PUT",
+
+              headers: {
+                Authorization: `Bearer ${freshToken}`,
+              },
+            }
+          );
         } catch (err) {
-          setPlayerError("Couldn't pause playback: " + err.message);
+          setPlayerError(
+            "Couldn't pause playback: " +
+              err.message
+          );
         }
+
         setIsPlayingSnippet(false);
-        socket.emit("host:snippet-played");
+
+        socket.emit(
+          "host:snippet-played"
+        );
       }, snippetMs || 1000);
     } catch (err) {
       setIsPlayingSnippet(false);
-      setPlayerError("Couldn't play the track: " + err.message);
+
+      setPlayerError(
+        "Couldn't play the track: " +
+          err.message
+      );
     }
   }
 
-  const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
-  const visualizerState = isPlayingSnippet ? "listening" : phase === "guessing" ? "guessing" : "idle";
-  const inSession = ["lobby", "round-active", "guessing", "reveal", "ended"].includes(phase);
+  /*
+   * =========================================================
+   * DERIVED DATA
+   * =========================================================
+   */
 
-  // ---------- Render ----------
+  const sortedPlayers = [
+    ...players,
+  ].sort(
+    (a, b) => b.score - a.score
+  );
+
+  const visualizerState =
+    isPlayingSnippet
+      ? "listening"
+      : phase === "guessing"
+        ? "guessing"
+        : phase === "reveal"
+          ? "correct"
+          : "idle";
+
+  const inSession = [
+    "lobby",
+    "round-active",
+    "guessing",
+    "reveal",
+    "ended",
+  ].includes(phase);
+
+  /*
+   * =========================================================
+   * LOADING
+   * =========================================================
+   */
 
   if (connected === null) {
     return (
-      <div className="screen">
-        <StatusScreen kind="loading" title="Checking Spotify connection" />
-      </div>
+      <StudioScene mode="host">
+        <div className="studio-loading-screen">
+          <div className="studio-loading-orb" />
+
+          <p className="hint">
+            Checking Spotify connection…
+          </p>
+        </div>
+      </StudioScene>
     );
   }
+
+  /*
+   * =========================================================
+   * NOT CONNECTED
+   * =========================================================
+   */
 
   if (!connected) {
     return (
-      <div className="screen">
-        <div className="hero-eyebrow">Host a game</div>
-        <h1 className="display-lg" style={{ marginBottom: 20 }}>
-          HOST A GAME
-        </h1>
-        <StatusScreen
-          kind="empty"
-          title="Connect Spotify to host"
-          message="You'll need Spotify Premium — snippet playback uses the Web Playback SDK, which is Premium-only."
-          actions={[
-            { label: "Connect Spotify", primary: true, onClick: () => (window.location.href = api.loginUrl()) },
-          ]}
-        />
-        {connectError && <p className="error-text">{connectError}</p>}
-        <Link to="/" className="hint cursor-target" style={{ marginTop: 12 }}>
-          ← Back
-        </Link>
-      </div>
+      <StudioScene mode="host">
+        <div className="studio-page-header">
+          <div className="studio-page-logo">
+            <span className="studio-page-logo__mark">
+              ●
+            </span>
+
+            <span>
+              NEEDLE
+              <br />
+              DROP
+            </span>
+          </div>
+
+          <div className="studio-page-eyebrow">
+            DJ CONTROL ROOM
+          </div>
+        </div>
+
+        <div className="studio-auth-layout">
+          <div className="studio-auth-copy">
+            <span className="studio-kicker">
+              HOST MODE
+            </span>
+
+            <h1>
+              TAKE
+              <br />
+              THE
+              <br />
+              <span>DECKS.</span>
+            </h1>
+
+            <p>
+              Connect Spotify to become the DJ,
+              create a room, and control the
+              entire session.
+            </p>
+
+            <a
+              href={api.loginUrl()}
+              className="studio-primary-button studio-primary-button--host"
+            >
+              <span>●</span>
+              CONNECT SPOTIFY
+            </a>
+
+            {connectError && (
+              <p className="error-text">
+                {connectError}
+              </p>
+            )}
+
+            <Link
+              to="/"
+              className="studio-back-link"
+            >
+              ← BACK TO HOME
+            </Link>
+          </div>
+
+          <div className="studio-auth-record">
+            <StudioTurntable
+              mode="host"
+              spinning={false}
+            />
+          </div>
+        </div>
+      </StudioScene>
     );
   }
+
+  /*
+   * =========================================================
+   * SETUP
+   * =========================================================
+   */
 
   if (phase === "setup") {
     return (
-      <div className="screen">
-        <div className="hero-eyebrow">Host a game</div>
-        <h1 className="display-lg" style={{ marginBottom: 8 }}>
-          HOST A GAME
-        </h1>
-        <p className="subtitle" style={{ textAlign: "center", marginInline: "auto", marginBottom: 32 }}>
-          Pick a playlist, tune the settings, then create your room.
-        </p>
+      <StudioScene mode="host">
+        <div className="studio-page-header">
+          <div className="studio-page-logo">
+            <span className="studio-page-logo__mark">
+              ●
+            </span>
 
-        <div className="card">
-          <label>Playlist</label>
-          <PlaylistPicker
-            playlists={playlists}
-            likedCount={likedCount}
-            selectedId={selectedId}
-            onSelect={selectPlaylist}
-          />
-
-          {loadingTracks && (
-            <div className="loading-stack" style={{ marginTop: 16 }}>
-              <Turntable size={70} />
-              <p className="hint">Loading tracks…</p>
-            </div>
-          )}
-          {!loadingTracks && tracks.length > 0 && (
-            <p className="hint" style={{ marginTop: 12 }}>
-              {tracks.length} playable tracks loaded.
-            </p>
-          )}
-
-          <div style={{ marginTop: 20 }}>
-            <label>Rounds</label>
-            <select
-              value={totalRounds}
-              onChange={(e) => setTotalRounds(Number(e.target.value))}
-            >
-              {ROUND_OPTIONS.filter((n) => n <= (tracks.length || 999)).map((n) => (
-                <option key={n} value={n}>
-                  {n} rounds
-                </option>
-              ))}
-              {tracks.length > 0 && (
-                <option value={tracks.length}>All {tracks.length} tracks</option>
-              )}
-            </select>
+            <span>
+              NEEDLE
+              <br />
+              DROP
+            </span>
           </div>
 
-          <div style={{ marginTop: 20 }}>
-            <label>Snippet length</label>
-            <select
-              value={snippetSeconds}
-              onChange={(e) => setSnippetSeconds(Number(e.target.value))}
-            >
-              {SNIPPET_OPTIONS.map((opt) => (
-                <option key={opt.seconds} value={opt.seconds}>
-                  {opt.label} · {opt.multiplier} points
-                </option>
-              ))}
-            </select>
-            <p className="hint" style={{ marginTop: 8 }}>
-              Shorter snippets are harder to guess, so correct answers are
-              worth more.
-            </p>
+          <div className="studio-page-eyebrow">
+            DJ CONTROL ROOM
           </div>
-
-          <div style={{ marginTop: 20 }}>
-            <label>Where should the song play?</label>
-            <select value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="local">Out loud from this device (everyone's together)</option>
-              <option value="remote">Players are remote (v2 — best effort for now)</option>
-            </select>
-          </div>
-
-          <button
-            className="btn btn-primary btn-block cursor-target"
-            style={{ marginTop: 24 }}
-            disabled={!tracks.length || !deviceReady}
-            onClick={createRoom}
-          >
-            {deviceReady ? "Create room" : "Connecting to Spotify player…"}
-          </button>
-          {playerError && <p className="error-text">{playerError}</p>}
-          {connectError && <p className="error-text">{connectError}</p>}
         </div>
 
-        <Link to="/" className="hint cursor-target" style={{ marginTop: 20 }}>
-          ← Back
-        </Link>
-      </div>
+        <div className="studio-setup-layout">
+          <div className="studio-setup-visual">
+            <span className="studio-kicker">
+              HOST SESSION
+            </span>
+
+            <h1>
+              BUILD THE
+              <br />
+              <span>SET.</span>
+            </h1>
+
+            <p>
+              Pick the music, tune the rules,
+              then open the room.
+            </p>
+
+            <StudioTurntable
+              mode="host"
+              spinning={false}
+            />
+
+            <StudioWaveform
+              state="idle"
+            />
+          </div>
+
+          <div className="studio-setup-panel">
+            <div className="studio-panel-header">
+              <span>01</span>
+
+              <h2>
+                ROOM SETUP
+              </h2>
+            </div>
+
+            {/* PLAYLIST */}
+
+            <div className="studio-field">
+              <label>
+                PLAYLIST
+              </label>
+
+              <PlaylistPicker
+                playlists={playlists}
+                likedCount={likedCount}
+                selectedId={selectedId}
+                onSelect={selectPlaylist}
+              />
+
+              {loadingTracks && (
+                <p className="studio-field-hint">
+                  Loading tracks…
+                </p>
+              )}
+
+              {!loadingTracks &&
+                tracks.length > 0 && (
+                  <p className="studio-field-hint">
+                    {tracks.length} playable
+                    tracks loaded.
+                  </p>
+                )}
+            </div>
+
+            {/* ROUNDS */}
+
+            <div className="studio-field">
+              <label htmlFor="host-rounds">
+                ROUNDS
+              </label>
+
+              <select
+                id="host-rounds"
+                value={totalRounds}
+                onChange={(e) =>
+                  setTotalRounds(
+                    Number(e.target.value)
+                  )
+                }
+              >
+                {ROUND_OPTIONS.filter(
+                  (n) =>
+                    n <=
+                    (tracks.length ||
+                      999)
+                ).map((n) => (
+                  <option
+                    key={n}
+                    value={n}
+                  >
+                    {n} rounds
+                  </option>
+                ))}
+
+                {tracks.length > 0 && (
+                  <option
+                    value={tracks.length}
+                  >
+                    All {tracks.length}{" "}
+                    tracks
+                  </option>
+                )}
+              </select>
+            </div>
+
+            {/* SNIPPET */}
+
+            <div className="studio-field">
+              <label htmlFor="host-snippet">
+                SNIPPET LENGTH
+              </label>
+
+              <select
+                id="host-snippet"
+                value={snippetSeconds}
+                onChange={(e) =>
+                  setSnippetSeconds(
+                    Number(e.target.value)
+                  )
+                }
+              >
+                {SNIPPET_OPTIONS.map(
+                  (opt) => (
+                    <option
+                      key={opt.seconds}
+                      value={opt.seconds}
+                    >
+                      {opt.label} ·{" "}
+                      {opt.multiplier} points
+                    </option>
+                  )
+                )}
+              </select>
+
+              <p className="studio-field-hint">
+                Shorter snippets are harder
+                to guess, so correct answers
+                are worth more.
+              </p>
+            </div>
+
+            {/* PLAYBACK MODE */}
+
+            <div className="studio-field">
+              <label htmlFor="host-mode">
+                PLAYBACK MODE
+              </label>
+
+              <select
+                id="host-mode"
+                value={mode}
+                onChange={(e) =>
+                  setMode(e.target.value)
+                }
+              >
+                <option value="local">
+                  Out loud from this device
+                </option>
+
+                <option value="remote">
+                  Players are remote
+                  (v2 — best effort for now)
+                </option>
+              </select>
+            </div>
+
+            {/* CREATE */}
+
+            <button
+              className="studio-primary-button studio-primary-button--full studio-primary-button--host"
+              disabled={
+                !tracks.length ||
+                !deviceReady
+              }
+              onClick={createRoom}
+            >
+              {deviceReady
+                ? "CREATE ROOM"
+                : "CONNECTING TO SPOTIFY PLAYER…"}
+            </button>
+
+            {playerError && (
+              <p className="error-text">
+                {playerError}
+              </p>
+            )}
+
+            {connectError && (
+              <p className="error-text">
+                {connectError}
+              </p>
+            )}
+
+            <Link
+              to="/"
+              className="studio-back-link"
+            >
+              ← BACK TO HOME
+            </Link>
+          </div>
+        </div>
+      </StudioScene>
     );
   }
 
-  return (
-    <div className="screen">
-      {inSession && <ConnectionBadge socket={socket} />}
+  /*
+   * =========================================================
+   * LOBBY
+   * =========================================================
+   */
 
-      {phase === "lobby" && (
-        <div className="phase-blur-enter" style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div className="hero-eyebrow">Room ready</div>
-          <div className="card" style={{ textAlign: "center" }}>
-            <div className="room-code-label">Room code</div>
-            <div className="room-code">{roomCode}</div>
-            <p className="hint">Have players go to the join page and enter this code.</p>
+  if (phase === "lobby") {
+    return (
+      <StudioScene mode="host">
+        <ConnectionBadge
+          socket={socket}
+        />
 
-            <h4 className="section-title" style={{ marginTop: 24 }}>
-              Players ({players.length})
-            </h4>
+        <div className="studio-page-header">
+          <div className="studio-page-logo">
+            <span className="studio-page-logo__mark">
+              ●
+            </span>
+
+            <span>
+              NEEDLE
+              <br />
+              DROP
+            </span>
+          </div>
+
+          <div className="studio-page-eyebrow">
+            ROOM OPEN
+          </div>
+        </div>
+
+        <div className="studio-lobby-layout">
+          <div className="studio-lobby-hero">
+            <span className="studio-kicker">
+              WAITING ROOM
+            </span>
+
+            <h1>
+              GET YOUR
+              <br />
+              <span>CREW</span>
+              <br />
+              READY.
+            </h1>
+
+            <p>
+              Send the room code to your players.
+              When everyone is in, start the
+              session.
+            </p>
+
+            <StudioTurntable
+              mode="host"
+              spinning={false}
+            />
+          </div>
+
+          <div className="studio-room-panel">
+            <div className="studio-room-label">
+              ROOM CODE
+            </div>
+
+            <div className="studio-room-code">
+              {roomCode}
+            </div>
+
+            <p className="studio-room-help">
+              Go to <strong>Join</strong> and
+              enter this code.
+            </p>
+
+            <div className="studio-panel-divider" />
+
+            <div className="studio-player-heading">
+              <span>
+                PLAYERS
+              </span>
+
+              <strong>
+                {players.length}
+              </strong>
+            </div>
+
             {players.length === 0 ? (
-              <p className="hint waiting-dots">Waiting for players to join</p>
+              <div className="studio-empty-players">
+                <div className="studio-waiting-orb" />
+
+                <p>
+                  Waiting for players
+                  <span className="studio-dots">
+                    ...
+                  </span>
+                </p>
+              </div>
             ) : (
-              <ul className="player-list">
-                {players.map((p) => (
-                  <li key={p.id} className="player-row">
-                    <span>{p.name}</span>
-                  </li>
+              <div className="studio-player-list">
+                {players.map((player, index) => (
+                  <div
+                    key={player.id}
+                    className="studio-player-row"
+                  >
+                    <span className="studio-player-rank">
+                      {String(
+                        index + 1
+                      ).padStart(2, "0")}
+                    </span>
+
+                    <span className="studio-player-name">
+                      {player.name}
+                    </span>
+
+                    <span className="studio-player-status">
+                      READY
+                    </span>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
 
             <button
-              className="btn btn-primary btn-block cursor-target"
-              style={{ marginTop: 24 }}
-              disabled={players.length === 0}
+              className="studio-primary-button studio-primary-button--full studio-primary-button--host"
+              disabled={
+                players.length === 0
+              }
               onClick={startGame}
             >
-              Start game
+              START GAME
             </button>
           </div>
         </div>
-      )}
+      </StudioScene>
+    );
+  }
 
-      {(phase === "round-active" || phase === "guessing") && (
-        <div className="phase-blur-enter" style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <GameHUD
-            roomCode={roomCode}
-            roundNumber={round?.roundNumber}
-            totalRounds={round?.totalRounds}
-          />
-          <div className="card" style={{ textAlign: "center" }}>
-            <div className="turntable-timer-stage">
-              <Turntable spinning={isPlayingSnippet} size={170} />
-              {phase === "guessing" && (
-                <RadialTimer
-                  pct={timeLeftPct}
-                  seconds={Math.ceil((timeLeftPct / 100) * (guessWindowMs / 1000))}
-                />
+  /*
+   * =========================================================
+   * ROUND ACTIVE / GUESSING
+   * =========================================================
+   */
+
+  if (
+    phase === "round-active" ||
+    phase === "guessing"
+  ) {
+    return (
+      <StudioScene mode="host">
+        <ConnectionBadge
+          socket={socket}
+        />
+
+        <div className="studio-page-header">
+          <div className="studio-page-logo">
+            <span className="studio-page-logo__mark">
+              ●
+            </span>
+
+            <span>
+              NEEDLE
+              <br />
+              DROP
+            </span>
+          </div>
+
+          <div className="studio-page-eyebrow">
+            DJ CONTROL ROOM
+          </div>
+        </div>
+
+        <StudioHUD
+          score={
+            sortedPlayers[0]?.score ||
+            0
+          }
+          round={
+            round?.roundNumber || 1
+          }
+          totalRounds={
+            round?.totalRounds ||
+            totalRounds
+          }
+          streak={0}
+        />
+
+        <div className="studio-host-game-layout">
+          <div className="studio-host-game-copy">
+            <span className="studio-kicker">
+              {phase === "round-active"
+                ? "NOW PLAYING"
+                : "GUESSING OPEN"}
+            </span>
+
+            <h1>
+              {phase ===
+              "round-active" ? (
+                <>
+                  DROP
+                  <br />
+                  THE
+                  <br />
+                  <span>TRACK.</span>
+                </>
+              ) : (
+                <>
+                  LET THEM
+                  <br />
+                  <span>GUESS.</span>
+                </>
+              )}
+            </h1>
+
+            <p>
+              {phase ===
+              "round-active"
+                ? "Everyone is listening. The answer window opens when the snippet ends."
+                : "Players are making their guesses. Watch the leaderboard and reveal when you're ready."}
+            </p>
+          </div>
+
+          <div className="studio-host-turntable">
+            <StudioTurntable
+              mode="host"
+              spinning={
+                isPlayingSnippet
+              }
+            />
+
+            <StudioWaveform
+              state={
+                visualizerState
+              }
+            />
+
+            <div className="studio-live-indicator">
+              <span />
+              {isPlayingSnippet
+                ? "PLAYING"
+                : "LIVE SESSION"}
+            </div>
+          </div>
+
+          <div className="studio-host-score-panel">
+            <div className="studio-score-panel-header">
+              <span>
+                LIVE LEADERBOARD
+              </span>
+
+              <span>
+                {roomCode}
+              </span>
+            </div>
+
+            <div className="studio-live-players">
+              {sortedPlayers.length ===
+              0 ? (
+                <p className="studio-field-hint">
+                  Waiting for players…
+                </p>
+              ) : (
+                sortedPlayers.map(
+                  (player, index) => (
+                    <div
+                      key={player.id}
+                      className={`studio-live-player ${
+                        index === 0
+                          ? "studio-live-player--leader"
+                          : ""
+                      }`}
+                    >
+                      <div className="studio-live-player__identity">
+                        <span className="studio-live-player__rank">
+                          #{index + 1}
+                        </span>
+
+                        <span className="studio-live-player__name">
+                          {player.name}
+                        </span>
+                      </div>
+
+                      <strong>
+                        {player.score}
+                      </strong>
+                    </div>
+                  )
+                )
               )}
             </div>
-            <Visualizer state={visualizerState} />
-            <h3 className="section-title">
-              {isPlayingSnippet ? "Playing snippet…" : "Guessing is open"}
-            </h3>
-            <p className="hint">
-              {isPlayingSnippet
-                ? "Everyone's listening for the drop."
-                : "Players are guessing on their own devices."}
-            </p>
 
-            <h4 className="section-title" style={{ marginTop: 24 }}>
-              Live scores
-            </h4>
-            <ul className="player-list">
-              {sortedPlayers.map((p, i) => (
-                <li key={p.id} className={`player-row${i === 0 ? " is-leader" : ""}`}>
+            {phase === "guessing" && (
+              <div className="studio-host-timer">
+                <div className="studio-host-timer__top">
                   <span>
-                    <span className="rank">#{i + 1}</span>
-                    {p.name}
+                    GUESS WINDOW
                   </span>
-                  <span className="score">{p.score}</span>
-                </li>
-              ))}
-            </ul>
+
+                  <strong>
+                    {Math.ceil(
+                      (timeLeftPct /
+                        100) *
+                        (guessWindowMs /
+                          1000)
+                    )}
+                    s
+                  </strong>
+                </div>
+
+                <div className="studio-timer__track">
+                  <div
+                    className="studio-timer__fill studio-timer__fill--host"
+                    style={{
+                      width: `${timeLeftPct}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {phase === "guessing" && (
               <button
-                className="btn btn-ghost btn-block cursor-target"
-                style={{ marginTop: 20 }}
+                className="studio-secondary-button"
                 onClick={revealNow}
               >
-                Reveal answer now
+                REVEAL ANSWER
               </button>
             )}
-            {playerError && <p className="error-text">{playerError}</p>}
+
+            {playerError && (
+              <p className="error-text">
+                {playerError}
+              </p>
+            )}
           </div>
         </div>
-      )}
+      </StudioScene>
+    );
+  }
 
-      {phase === "reveal" && reveal && (
-        <div className="phase-blur-enter" style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <GameHUD roomCode={roomCode} roundNumber={reveal.roundNumber} totalRounds={reveal.totalRounds} />
-          <div className="card">
-            <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 20 }}>
-              {reveal.track.image && (
-                <img src={reveal.track.image} alt="" style={{ width: 64, height: 64, borderRadius: 3 }} />
-              )}
-              <div>
-                <div style={{ fontWeight: 700 }}>{reveal.track.name}</div>
-                <div className="hint">{reveal.track.artists}</div>
-              </div>
+  /*
+   * =========================================================
+   * REVEAL
+   * =========================================================
+   */
+
+  if (
+    phase === "reveal" &&
+    reveal
+  ) {
+    return (
+      <StudioScene mode="host">
+        <ConnectionBadge
+          socket={socket}
+        />
+
+        <div className="studio-page-header">
+          <div className="studio-page-logo">
+            <span className="studio-page-logo__mark">
+              ●
+            </span>
+
+            <span>
+              NEEDLE
+              <br />
+              DROP
+            </span>
+          </div>
+
+          <div className="studio-page-eyebrow">
+            TRACK REVEALED
+          </div>
+        </div>
+
+        <StudioHUD
+          score={
+            sortedPlayers[0]?.score ||
+            0
+          }
+          round={
+            reveal.roundNumber
+          }
+          totalRounds={
+            reveal.totalRounds
+          }
+          streak={0}
+        />
+
+        <div className="studio-reveal-layout">
+          <div className="studio-reveal-copy">
+            <span className="studio-kicker">
+              ANSWER
+            </span>
+
+            <h1>
+              THAT
+              <br />
+              WAS
+              <br />
+              <span>THE DROP.</span>
+            </h1>
+
+            <StudioTurntable
+              mode="host"
+              stopping
+            />
+
+            <StudioWaveform
+              state="correct"
+            />
+          </div>
+
+          <div className="studio-reveal-panel">
+            {reveal.track?.image && (
+              <img
+                className="studio-reveal-art"
+                src={
+                  reveal.track.image
+                }
+                alt=""
+              />
+            )}
+
+            <div className="studio-reveal-label">
+              THE TRACK WAS
             </div>
-            <h4 className="section-title">Leaderboard</h4>
-            <ul className="player-list">
-              {sortedPlayers.map((p, i) => (
-                <li key={p.id} className={`player-row${i === 0 ? " is-leader" : ""}`}>
-                  <span>
-                    <span className="rank">#{i + 1}</span>
-                    {p.name}
-                  </span>
-                  <span className="score">{p.score}</span>
-                </li>
-              ))}
-            </ul>
+
+            <h2 className="studio-reveal-title">
+              {reveal.track?.name}
+            </h2>
+
+            <p className="studio-reveal-artist">
+              {reveal.track?.artists}
+            </p>
+
+            <div className="studio-panel-divider" />
+
+            <div className="studio-player-heading">
+              <span>
+                LEADERBOARD
+              </span>
+
+              <strong>
+                {players.length}
+              </strong>
+            </div>
+
+            <div className="studio-player-list">
+              {sortedPlayers.map(
+                (player, index) => (
+                  <div
+                    key={player.id}
+                    className={`studio-player-row ${
+                      index === 0
+                        ? "studio-player-row--leader"
+                        : ""
+                    }`}
+                  >
+                    <span className="studio-player-rank">
+                      #{index + 1}
+                    </span>
+
+                    <span className="studio-player-name">
+                      {player.name}
+                    </span>
+
+                    <strong>
+                      {player.score}
+                    </strong>
+                  </div>
+                )
+              )}
+            </div>
+
             <button
-              className="btn btn-primary btn-block cursor-target"
-              style={{ marginTop: 20 }}
+              className="studio-primary-button studio-primary-button--full studio-primary-button--host"
               onClick={nextRound}
             >
-              {reveal.isLastRound ? "See final scores" : "Next round"}
+              {reveal.isLastRound
+                ? "SEE FINAL SCORES"
+                : "NEXT ROUND →"}
             </button>
           </div>
         </div>
-      )}
+      </StudioScene>
+    );
+  }
 
-      {phase === "ended" && (
-        <div className="phase-blur-enter" style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div className="hero-eyebrow">Game complete</div>
-          <h1 className="display-lg" style={{ marginBottom: 20 }}>
-            FINAL SCORES
-          </h1>
-          <div className="card">
-            <ul className="player-list">
-              {sortedPlayers.map((p, i) => (
-                <li key={p.id} className={`player-row${i === 0 ? " is-leader" : ""}`}>
-                  <span>
-                    <span className="rank">#{i + 1}</span>
-                    {p.name}
-                  </span>
-                  <span className="score">{p.score}</span>
-                </li>
-              ))}
-            </ul>
+  /*
+   * =========================================================
+   * ENDED
+   * =========================================================
+   */
+
+  if (phase === "ended") {
+    return (
+      <StudioScene mode="host">
+        <ConnectionBadge
+          socket={socket}
+        />
+
+        <div className="studio-page-header">
+          <div className="studio-page-logo">
+            <span className="studio-page-logo__mark">
+              ●
+            </span>
+
+            <span>
+              NEEDLE
+              <br />
+              DROP
+            </span>
           </div>
-          <Link to="/" className="hint cursor-target" style={{ marginTop: 20 }}>
-            ← Back to home
+
+          <div className="studio-page-eyebrow">
+            END OF SET
+          </div>
+        </div>
+
+        <div className="studio-ended-layout">
+          <div className="studio-ended-copy">
+            <span className="studio-kicker">
+              SESSION COMPLETE
+            </span>
+
+            <h1>
+              THAT'S A
+              <br />
+              <span>WRAP.</span>
+            </h1>
+
+            <p>
+              The room has gone quiet.
+              Here's how your crew finished
+              the set.
+            </p>
+          </div>
+
+          <StudioTurntable
+            mode="host"
+            stopping
+          />
+
+          <div className="studio-final-score studio-final-score--leaderboard">
+            <div className="studio-final-score__header">
+              <span>
+                FINAL LEADERBOARD
+              </span>
+
+              <span>
+                {roomCode}
+              </span>
+            </div>
+
+            <div className="studio-final-leaderboard">
+              {sortedPlayers.map(
+                (player, index) => (
+                  <div
+                    key={player.id}
+                    className={`studio-final-player ${
+                      index === 0
+                        ? "studio-final-player--winner"
+                        : ""
+                    }`}
+                  >
+                    <span className="studio-final-player__rank">
+                      #{index + 1}
+                    </span>
+
+                    <span className="studio-final-player__name">
+                      {player.name}
+                    </span>
+
+                    <strong>
+                      {player.score}
+                    </strong>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+
+          <Link
+            to="/"
+            className="studio-back-link"
+          >
+            ← BACK TO HOME
           </Link>
         </div>
-      )}
-    </div>
-  );
+      </StudioScene>
+    );
+  }
+
+  return null;
 }
