@@ -1,0 +1,44 @@
+/* ==================================================================
+   NEEDLE DROP — Phase 8: Home-page scroll vinyl
+   Import LAST (after phase7.css). Home-page-only: every selector here
+   is scoped to .home-vinyl-layer / .vinyl-disc / .home-content-layer,
+   none of which are used anywhere except Home.jsx.
+   ================================================================== */
+
+.home-vinyl-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.home-vinyl-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.vinyl-disc {
+  width: var(--tt-size);
+  height: var(--tt-size);
+  font-size: calc(var(--tt-size) * 0.1);
+  position: relative;
+  will-change: transform;
+  filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.6));
+}
+
+@media (max-width: 720px) {
+  .vinyl-disc {
+    width: min(var(--tt-size), 46vw);
+    height: min(var(--tt-size), 46vw);
+  }
+}
+
+/* Real page content stacks above the fixed vinyl layer. Scoped to Home
+   only — never applied to Solo/Host/Join/PlayerGame. */
+.home-content-layer {
+  position: relative;
+  z-index: 2;
+}

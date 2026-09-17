@@ -1,4 +1,4 @@
-import "../game-ui.css";
+import "./game-ui.css";
 
 /**
  * variant: "solo" | "host" | "join" | "player" — controls accent color

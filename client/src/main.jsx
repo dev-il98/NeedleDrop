@@ -9,6 +9,13 @@ import "./phase3.css";
 import "./phase4.css";
 import "./phase5.css";
 import "./game-ui.css";
+import "./styles.css";
+import "./game.css";
+import "./phase3.css";
+import "./phase4.css";
+import "./phase5.css";
+import "./game-ui.css";
+import "./home-studio.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

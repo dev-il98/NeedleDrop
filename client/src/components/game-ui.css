@@ -1,0 +1,489 @@
+/* ============================================================
+   GAME UI — shared cinematic design system for Solo/Host/Join/
+   PlayerGame/Results. Additive only — never overrides .screen,
+   .card, .btn etc. used elsewhere in the app.
+   ============================================================ */
+
+:root {
+  --studio-neon: #c6ff4d;
+  --studio-neon-dim: #9fd936;
+  --studio-amber: #f0a04b;
+  --studio-amber-dim: #c77f34;
+  --studio-violet: #b98af5;
+  --studio-violet-dim: #9265d1;
+  --studio-bg: #08070a;
+  --studio-panel: rgba(255, 255, 255, 0.035);
+  --studio-line: rgba(255, 255, 255, 0.09);
+  --studio-red: #e0554f;
+}
+
+.studio {
+  min-height: 100vh;
+  background: var(--studio-bg);
+  color: var(--text);
+  font-family: var(--body);
+  position: relative;
+  overflow-x: hidden;
+  padding-bottom: 60px;
+}
+
+/* Per-mode atmosphere tints, layered behind everything */
+.studio-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.studio--solo .studio-bg {
+  background:
+    radial-gradient(circle at 20% 15%, rgba(198, 255, 77, 0.08), transparent 50%),
+    radial-gradient(circle at 85% 80%, rgba(240, 160, 75, 0.05), transparent 45%);
+}
+.studio--host .studio-bg {
+  background:
+    radial-gradient(circle at 80% 10%, rgba(240, 160, 75, 0.1), transparent 50%),
+    radial-gradient(circle at 15% 85%, rgba(198, 255, 77, 0.07), transparent 45%);
+}
+.studio--join .studio-bg {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(185, 138, 245, 0.12), transparent 55%),
+    radial-gradient(circle at 50% 100%, rgba(198, 255, 77, 0.05), transparent 45%);
+}
+.studio--player .studio-bg {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(185, 138, 245, 0.08), transparent 50%),
+    radial-gradient(circle at 85% 75%, rgba(198, 255, 77, 0.07), transparent 45%);
+}
+
+.studio-content {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 20px 40px;
+}
+
+/* ---------- Top nav / header ---------- */
+
+.studio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.studio-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  letter-spacing: 0.03em;
+}
+.studio-logo .mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #2a2a2a, #0a0a0a 70%);
+  border: 1px solid rgba(198, 255, 77, 0.4);
+  position: relative;
+  flex-shrink: 0;
+}
+.studio-logo .mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--studio-neon);
+  box-shadow: 0 0 6px var(--studio-neon);
+}
+
+.studio-eyebrow {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- HUD: reusable stat pill row ---------- */
+
+.game-hud {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.hud-stat {
+  background: var(--studio-panel);
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  text-align: center;
+}
+
+.hud-stat-label {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.hud-stat-value {
+  font-family: var(--display);
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+  color: var(--hud-color, var(--text));
+}
+.hud-stat--neon .hud-stat-value { --hud-color: var(--studio-neon); }
+.hud-stat--amber .hud-stat-value { --hud-color: var(--studio-amber); }
+.hud-stat--violet .hud-stat-value { --hud-color: var(--studio-violet); }
+
+/* ---------- Neon panel (base container) ---------- */
+
+.neon-panel {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012));
+  border: 1px solid var(--studio-line);
+  border-radius: 22px;
+  padding: 28px 24px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  position: relative;
+}
+.neon-panel--glow-neon { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(198, 255, 77, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.04); border-color: rgba(198, 255, 77, 0.25); }
+.neon-panel--glow-amber { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(240, 160, 75, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.04); border-color: rgba(240, 160, 75, 0.25); }
+.neon-panel--glow-violet { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(185, 138, 245, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.04); border-color: rgba(185, 138, 245, 0.25); }
+
+/* ---------- Turntable (reusable centerpiece) ---------- */
+
+.turntable {
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 26px;
+  position: relative;
+}
+
+.turntable-disc {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: repeating-radial-gradient(
+    circle at center,
+    #0a0910 0px,
+    #0a0910 3px,
+    #17141f 4px,
+    #17141f 9px
+  );
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  position: relative;
+}
+.turntable-disc::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 32%;
+  height: 32%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #eaffb0, var(--tt-color, var(--studio-neon)) 55%, var(--tt-color-dim, var(--studio-neon-dim)) 100%);
+  box-shadow: 0 0 30px var(--tt-color, var(--studio-neon));
+}
+.turntable-disc::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6%;
+  height: 6%;
+  border-radius: 50%;
+  background: #0a0910;
+}
+.turntable-disc.spinning {
+  animation: studio-spin 2.4s linear infinite;
+}
+.turntable-disc.stopping {
+  animation: studio-spin-down 2.2s cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+}
+@keyframes studio-spin-down {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(900deg); }
+}
+
+.turntable--host .turntable-disc::before { --tt-color: var(--studio-amber); --tt-color-dim: var(--studio-amber-dim); }
+.turntable--join .turntable-disc::before,
+.turntable--player .turntable-disc::before { --tt-color: var(--studio-violet); --tt-color-dim: var(--studio-violet-dim); }
+
+@keyframes studio-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.tonearm {
+  position: absolute;
+  top: -6px;
+  right: -14px;
+  width: 90px;
+  height: 90px;
+  transform-origin: top right;
+  transform: rotate(-18deg);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.tonearm.active {
+  transform: rotate(4deg);
+}
+.tonearm::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2a2a2a;
+  border: 2px solid var(--studio-neon-dim);
+}
+.tonearm::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 9px;
+  width: 3px;
+  height: 74px;
+  background: linear-gradient(180deg, #3a3a3a, #1c1c1c);
+  border-radius: 2px;
+  transform: rotate(38deg);
+  transform-origin: top center;
+}
+
+/* ---------- Waveform (state-driven, no fake audio data) ---------- */
+
+.waveform {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  height: 34px;
+  margin: 4px 0 18px;
+}
+.waveform-bar {
+  width: 4px;
+  border-radius: 2px;
+  background: var(--studio-neon-dim);
+  height: 20%;
+  transition: height 0.2s ease, background 0.3s ease;
+}
+.waveform--listening .waveform-bar {
+  background: var(--studio-neon);
+  animation: studio-wave 0.9s ease-in-out infinite;
+}
+.waveform--correct .waveform-bar { background: var(--teal); height: 85%; }
+.waveform--wrong .waveform-bar { background: var(--studio-red); height: 30%; }
+.waveform-bar:nth-child(1) { animation-delay: 0s; }
+.waveform-bar:nth-child(2) { animation-delay: 0.1s; }
+.waveform-bar:nth-child(3) { animation-delay: 0.2s; }
+.waveform-bar:nth-child(4) { animation-delay: 0.3s; }
+.waveform-bar:nth-child(5) { animation-delay: 0.15s; }
+.waveform-bar:nth-child(6) { animation-delay: 0.25s; }
+.waveform-bar:nth-child(7) { animation-delay: 0.05s; }
+
+@keyframes studio-wave {
+  0%, 100% { height: 20%; }
+  50% { height: 90%; }
+}
+
+/* ---------- Ambient particles ---------- */
+
+.ambient-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.ambient-particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(198, 255, 77, 0.4);
+  animation: studio-float 6s ease-in-out infinite;
+}
+@keyframes studio-float {
+  0%, 100% { transform: translateY(0); opacity: 0.3; }
+  50% { transform: translateY(-14px); opacity: 0.8; }
+}
+
+/* ---------- Player tiles (host player wall / leaderboard) ---------- */
+
+.player-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.player-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--studio-panel);
+  border: 1px solid var(--studio-line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  transition: box-shadow 0.4s ease, border-color 0.4s ease;
+}
+.player-tile.correct-flash {
+  border-color: rgba(198, 255, 77, 0.6);
+  box-shadow: 0 0 22px rgba(198, 255, 77, 0.25);
+}
+
+.player-tile-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.player-tile-rank {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.player-tile-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-tile-offline {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.player-tile-score {
+  font-family: var(--mono);
+  color: var(--studio-neon);
+  font-weight: 600;
+}
+
+/* ---------- Console button (styles existing buttons, DJ-console look) ---------- */
+
+.console-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  padding: 14px 22px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.2s ease, filter 0.15s ease;
+  min-height: 44px;
+}
+.console-btn:active { transform: scale(0.97); }
+.console-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.console-btn--neon {
+  background: linear-gradient(180deg, var(--studio-neon), var(--studio-neon-dim));
+  color: #10160a;
+  box-shadow: 0 8px 24px rgba(198, 255, 77, 0.25);
+}
+.console-btn--neon:hover:not(:disabled) { filter: brightness(1.07); }
+
+.console-btn--amber {
+  background: linear-gradient(180deg, var(--studio-amber), var(--studio-amber-dim));
+  color: #1c1006;
+  box-shadow: 0 8px 24px rgba(240, 160, 75, 0.25);
+}
+.console-btn--amber:hover:not(:disabled) { filter: brightness(1.07); }
+
+.console-btn--ghost {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+.console-btn--ghost:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.25); }
+
+.console-btn--block { width: 100%; }
+
+/* ---------- Room code display ---------- */
+
+.room-code-display {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: clamp(2rem, 8vw, 2.8rem);
+  letter-spacing: 0.35em;
+  text-align: center;
+  color: var(--studio-violet);
+  text-shadow: 0 0 30px rgba(185, 138, 245, 0.4);
+  padding: 8px 0 4px;
+}
+
+/* ---------- Status pulses ---------- */
+
+.status-pulse {
+  position: relative;
+}
+.status-pulse.correct {
+  animation: studio-pulse-neon 0.6s ease;
+}
+.status-pulse.wrong {
+  animation: studio-pulse-red 0.5s ease;
+}
+@keyframes studio-pulse-neon {
+  0% { box-shadow: 0 0 0 0 rgba(198, 255, 77, 0.5); }
+  100% { box-shadow: 0 0 0 26px rgba(198, 255, 77, 0); }
+}
+@keyframes studio-pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(224, 85, 79, 0.5); }
+  100% { box-shadow: 0 0 0 20px rgba(224, 85, 79, 0); }
+}
+
+/* ---------- Entrance stagger ---------- */
+
+.studio-enter {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: studio-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.studio-enter--1 { animation-delay: 0.05s; }
+.studio-enter--2 { animation-delay: 0.12s; }
+.studio-enter--3 { animation-delay: 0.2s; }
+.studio-enter--4 { animation-delay: 0.28s; }
+
+@keyframes studio-rise {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Reduced motion / touch ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .turntable-disc.spinning,
+  .waveform--listening .waveform-bar,
+  .ambient-particle,
+  .studio-enter {
+    animation: none !important;
+  }
+  .studio-enter {
+    opacity: 1;
+    transform: none;
+  }
+  .tonearm {
+    transition: none;
+  }
+}

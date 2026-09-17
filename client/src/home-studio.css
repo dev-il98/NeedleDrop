@@ -1,0 +1,404 @@
+/* ==================================================================
+   home-studio.css — styles for Home.jsx's redesigned hero/mode-cards/
+   studio-scene/info-bar, plus HomeVinyl.jsx's scroll-driven disc.
+   Additive only. Reuses --studio-* tokens from game-ui.css and
+   --lime/--bg/--line/--mono/--display etc. from styles.css so this
+   matches the rest of the app instead of inventing a new palette.
+   Import this AFTER game-ui.css in main.jsx.
+   ================================================================== */
+
+/* ---------------- scroll vinyl layer (HomeVinyl.jsx) ----------------
+   Fixed, full-viewport, transformed every frame by JS (translate3d on
+   the wrapper, rotate/scale on the disc itself via refs — see
+   HomeVinyl.jsx). CSS here only sets up the anchor point and the
+   ambient look; it never sets transform itself. */
+
+.home-vinyl-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.home-vinyl-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.vinyl-disc {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--tt-size);
+  height: var(--tt-size);
+  font-size: calc(var(--tt-size) * 0.1); /* .platter's em-sizing needs this, same as .turntable */
+  will-change: transform;
+  opacity: 0.4;
+  filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.6));
+  mix-blend-mode: screen;
+}
+
+/* Page content sits above the vinyl layer. Individual sections below
+   keep their normal solid background (inherited from body), so the
+   vinyl naturally shows only through .studio-hero's transparent area
+   and gets covered again once the page scrolls into solid sections —
+   intentional, keeps it a hero-area effect rather than fighting for
+   legibility against every section's text. */
+.home-content-layer {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vinyl-disc {
+    opacity: 0.28;
+  }
+}
+
+/* ==================================================================
+   Hero
+   ================================================================== */
+
+.studio-hero {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  align-items: center;
+  gap: 40px;
+  padding: 100px 24px 60px;
+  background: transparent; /* lets .home-vinyl-layer show through here */
+}
+
+@media (max-width: 900px) {
+  .studio-hero {
+    grid-template-columns: 1fr;
+    padding-top: 84px;
+    text-align: center;
+  }
+}
+
+.studio-copy {
+  position: relative;
+  z-index: 2;
+  padding: 28px 26px;
+  border-radius: 20px;
+}
+
+/* Soft readability scrim behind the hero text only — keeps the vinyl
+   visible in the scene without ever fighting the copy for contrast. */
+.studio-copy::before {
+  content: "";
+  position: absolute;
+  inset: -12% -8%;
+  z-index: -1;
+  background: radial-gradient(
+    ellipse 90% 80% at 30% 40%,
+    rgba(8, 7, 10, 0.86),
+    rgba(8, 7, 10, 0.5) 55%,
+    transparent 78%
+  );
+  pointer-events: none;
+}
+
+.studio-title {
+  font-family: var(--display);
+  font-size: clamp(2.6rem, 6.2vw, 4.6rem);
+  line-height: 0.98;
+  margin: 14px 0 22px;
+  color: #fff;
+}
+
+.studio-subtitle {
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.65;
+  max-width: 480px;
+  margin: 0 0 34px;
+}
+
+@media (max-width: 900px) {
+  .studio-subtitle {
+    margin-inline: auto;
+  }
+}
+
+/* ---------------- mode cards ---------------- */
+
+.mode-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  perspective: 1200px;
+}
+
+.mode-card {
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --mc-accent: var(--studio-neon);
+  --mc-accent-dim: var(--studio-neon-dim);
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid var(--studio-line);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  text-decoration: none;
+  color: inherit;
+  transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+  transition: transform 180ms ease-out, border-color 250ms ease, box-shadow 250ms ease;
+}
+
+.mode-card:hover,
+.mode-card:focus-visible {
+  border-color: rgba(var(--mc-accent-rgb, 198, 255, 77), 0.5);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.55), 0 0 32px rgba(var(--mc-accent-rgb, 198, 255, 77), 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.mode-card:focus-visible {
+  outline: 2px solid var(--mc-accent);
+  outline-offset: 3px;
+}
+
+.mode-card.accent-solo { --mc-accent: var(--studio-neon); --mc-accent-dim: var(--studio-neon-dim); --mc-accent-rgb: 198, 255, 77; }
+.mode-card.accent-host { --mc-accent: var(--studio-amber); --mc-accent-dim: var(--studio-amber-dim); --mc-accent-rgb: 240, 160, 75; }
+.mode-card.accent-join { --mc-accent: var(--studio-violet); --mc-accent-dim: var(--studio-violet-dim); --mc-accent-rgb: 185, 138, 245; }
+
+.mode-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(var(--mc-accent-rgb, 198, 255, 77), 0.12);
+  border: 1px solid rgba(var(--mc-accent-rgb, 198, 255, 77), 0.3);
+  color: var(--mc-accent);
+}
+
+.mode-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.mode-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.mode-body h3 {
+  margin: 0 0 4px;
+  font-family: var(--display);
+  font-size: 1.3rem;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+
+.mode-body h3 span {
+  color: var(--mc-accent);
+}
+
+.mode-body p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.mode-arrow {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--mc-accent-rgb, 198, 255, 77), 0.35);
+  background: rgba(var(--mc-accent-rgb, 198, 255, 77), 0.08);
+  color: var(--mc-accent);
+  transition: transform 220ms ease, background-color 220ms ease;
+}
+
+.mode-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mode-card:hover .mode-arrow,
+.mode-card:focus-visible .mode-arrow {
+  transform: translateX(4px);
+  background: rgba(var(--mc-accent-rgb, 198, 255, 77), 0.16);
+}
+
+/* ---------------- studio scene (right side of hero) ---------------- */
+
+.studio-scene {
+  position: relative;
+  z-index: 1;
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .studio-scene {
+    min-height: 320px;
+  }
+}
+
+.studio-wall {
+  position: absolute;
+  inset: 6% 4%;
+  border-radius: 24px;
+  border: 1px solid var(--studio-line);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.008));
+}
+
+.studio-window {
+  position: absolute;
+  top: 10%;
+  right: 12%;
+  width: 34%;
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #16324a, #0a1520);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.skyline {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 12%;
+  padding: 16%;
+}
+
+.skyline span {
+  background: rgba(255, 205, 130, 0.5);
+  border-radius: 1px;
+  opacity: 0.3;
+  animation: studio-twinkle 4.5s ease-in-out infinite;
+}
+.skyline span:nth-child(3n) { animation-delay: 1.2s; }
+.skyline span:nth-child(3n + 1) { animation-delay: 2.4s; }
+
+@keyframes studio-twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.65; }
+}
+
+.studio-lamp {
+  position: absolute;
+  top: 8%;
+  left: 8%;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(198, 255, 77, 0.28), transparent 70%);
+  filter: blur(2px);
+  animation: studio-lamp-breathe 6s ease-in-out infinite;
+}
+
+@keyframes studio-lamp-breathe {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.studio-poster {
+  position: absolute;
+  bottom: 14%;
+  left: 10%;
+  width: 18%;
+  aspect-ratio: 2 / 3;
+  border-radius: 4px;
+  background: linear-gradient(160deg, rgba(185, 138, 245, 0.16), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--studio-line);
+}
+
+.studio-plant {
+  position: absolute;
+  bottom: 6%;
+  right: 10%;
+  width: 46px;
+  height: auto;
+  opacity: 0.7;
+}
+
+.studio-turntable-wrap {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ==================================================================
+   Info bar
+   ================================================================== */
+
+.info-bar {
+  position: relative;
+  z-index: 1;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+  border-top: 1px solid var(--studio-line);
+  border-bottom: 1px solid var(--studio-line);
+  background: var(--bg);
+}
+
+.info-bar-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.info-tag {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--studio-line);
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+
+.info-quote {
+  margin: 0;
+  font-size: 0.98rem;
+  font-style: italic;
+  color: var(--muted);
+  max-width: 46ch;
+}
+
+/* ---------------- reduced motion ---------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-lamp,
+  .skyline span {
+    animation: none;
+  }
+  .mode-card {
+    transition: border-color 250ms ease, box-shadow 250ms ease;
+  }
+}

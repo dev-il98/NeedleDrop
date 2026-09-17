@@ -1,10 +1,7 @@
-// Same fuzzy matching logic as server/matcher.js, duplicated here so
-// single-player mode can check guesses instantly without a server round-trip.
-
 export function normalize(str = "") {
   return str
     .toLowerCase()
-    .replace(/\(.*?\)|\[.*?\]/g, " ") // drop "(Remastered 2011)" etc.
+    .replace(/\(.*?\)|\[.*?\]/g, " ")
     .replace(/feat\.?.*$/i, " ")
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")

@@ -1,396 +1,141 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-
 import { getSocket } from "../lib/socket";
+import Turntable from "../components/Turntable";
+import AmbientParticles from "../components/AmbientParticles";
+import "../components/game-ui.css";
 
-import StudioScene from "../components/StudioScene";
-import StudioTurntable from "../components/StudioTurntable";
-import StudioWaveform from "../components/StudioWaveform";
+// Purely cosmetic pause between a REAL successful join and navigating away,
+// so the "room found → entering" beats are visible. Never shown on failure.
+const ENTER_TRANSITION_MS = 500;
 
 export default function Join() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-
-  const [code, setCode] = useState(
-    params.get("code") || ""
-  );
-
+  const [code, setCode] = useState(params.get("code") || "");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-  const [joining, setJoining] = useState(false);
+  // idle | connecting | found — reflects the real socket ack, nothing faked.
+  const [stage, setStage] = useState("idle");
 
   function handleJoin(e) {
     e.preventDefault();
-
     setError("");
-
     if (!code.trim() || !name.trim()) {
-      setError(
-        "Enter both a room code and your name."
-      );
+      setError("Enter both a room code and your name.");
       return;
     }
-
-    setJoining(true);
-
+    setStage("connecting");
     const socket = getSocket();
-
+    const playerId = crypto.randomUUID();
     socket.emit(
       "player:join-room",
-      {
-        code: code.trim().toUpperCase(),
-        name: name.trim(),
-      },
+      { code: code.trim().toUpperCase(), name: name.trim(), playerId },
       (res) => {
-        setJoining(false);
-
         if (!res.ok) {
-          setError(
-            res.error ||
-              "Couldn't join that room."
-          );
+          setStage("idle");
+          setError(res.error || "Couldn't join that room.");
           return;
         }
-
-        navigate("/play", {
-          state: {
-            name: name.trim(),
-            roomCode: res.roomCode,
-            trackChoices:
-              res.trackChoices || [],
-          },
-        });
+        setStage("found");
+        setTimeout(() => {
+          navigate("/play", {
+            state: {
+              name: name.trim(),
+              roomCode: res.roomCode,
+              playerId: res.playerId || playerId,
+              trackChoices: res.trackChoices || [],
+            },
+          });
+        }, ENTER_TRANSITION_MS);
       }
     );
   }
 
-  /*
-   * =========================================================
-   * ERROR
-   * =========================================================
-   */
-
-  if (error) {
-    return (
-      <StudioScene mode="join">
-        <div className="studio-page-header">
-          <div className="studio-page-logo">
-            <span className="studio-page-logo__mark">
-              ●
-            </span>
-
-            <span>
-              NEEDLE
-              <br />
-              DROP
-            </span>
-          </div>
-
-          <div className="studio-page-eyebrow">
-            UNDERGROUND CLUB
-          </div>
-        </div>
-
-        <div className="studio-join-error-layout">
-          <div className="studio-join-error-copy">
-            <span className="studio-kicker">
-              ENTRY DENIED
-            </span>
-
-            <h1>
-              WRONG
-              <br />
-              <span>VIBE.</span>
-            </h1>
-
-            <p>
-              We couldn't get you into that
-              room. Check the code and try
-              again.
-            </p>
-
-            <div className="studio-error-box">
-              <span>ERROR</span>
-              <strong>{error}</strong>
-            </div>
-
-            <div className="studio-error-actions">
-              <button
-                className="studio-primary-button studio-primary-button--join"
-                onClick={() => setError("")}
-              >
-                TRY AGAIN
-              </button>
-
-              <Link
-                to="/"
-                className="studio-back-link"
-              >
-                ← BACK TO HOME
-              </Link>
-            </div>
-          </div>
-
-          <div className="studio-join-error-visual">
-            <StudioTurntable
-              mode="join"
-              stopping
-            />
-
-            <StudioWaveform
-              state="wrong"
-            />
-          </div>
-        </div>
-      </StudioScene>
-    );
-  }
-
-  /*
-   * =========================================================
-   * JOINING
-   * =========================================================
-   */
-
-  if (joining) {
-    return (
-      <StudioScene mode="join">
-        <div className="studio-page-header">
-          <div className="studio-page-logo">
-            <span className="studio-page-logo__mark">
-              ●
-            </span>
-
-            <span>
-              NEEDLE
-              <br />
-              DROP
-            </span>
-          </div>
-
-          <div className="studio-page-eyebrow">
-            CONNECTING TO CLUB
-          </div>
-        </div>
-
-        <div className="studio-joining-layout">
-          <StudioTurntable
-            mode="join"
-            spinning
-          />
-
-          <StudioWaveform
-            state="listening"
-          />
-
-          <span className="studio-kicker">
-            CONNECTING
-          </span>
-
-          <h1>
-            FINDING
-            <br />
-            THE <span>ROOM.</span>
-          </h1>
-
-          <p>
-            Getting you onto the dance floor…
-          </p>
-
-          <div className="studio-joining-indicator">
-            <span />
-            <span />
-            <span />
-          </div>
-        </div>
-      </StudioScene>
-    );
-  }
-
-  /*
-   * =========================================================
-   * JOIN FORM
-   * =========================================================
-   */
+  const joining = stage !== "idle";
 
   return (
-    <StudioScene mode="join">
-      <div className="studio-page-header">
-        <div className="studio-page-logo">
-          <span className="studio-page-logo__mark">
-            ●
-          </span>
-
-          <span>
-            NEEDLE
-            <br />
-            DROP
-          </span>
-        </div>
-
-        <div className="studio-page-eyebrow">
-          UNDERGROUND CLUB
-        </div>
-      </div>
-
-      <div className="studio-join-layout">
-        {/* LEFT SIDE */}
-
-        <div className="studio-join-copy">
-          <span className="studio-kicker">
-            PLAYER MODE
-          </span>
-
-          <h1>
-            ENTER
-            <br />
-            THE
-            <br />
-            <span>CLUB.</span>
-          </h1>
-
-          <p>
-            Your host has started a session.
-            Enter the room code, choose your
-            name, and get ready for the drop.
-          </p>
-
-          <div className="studio-club-status">
-            <span className="studio-club-status__dot" />
-
-            <div>
-              <strong>
-                LIVE ROOM
-              </strong>
-
-              <small>
-                WAITING FOR PLAYERS
-              </small>
-            </div>
+    <div className="studio studio--join">
+      <div className="studio-bg" />
+      <AmbientParticles />
+      <div className="studio-content">
+        <div className="studio-header studio-enter">
+          <div className="studio-logo">
+            <span className="mark" />
+            NEEDLE DROP
           </div>
-
-          <StudioWaveform
-            state="idle"
-          />
+          <div className="studio-eyebrow">Enter the room</div>
         </div>
 
-        {/* CENTER RECORD */}
+        <div className="neon-panel neon-panel--glow-violet studio-enter studio-enter--1" style={{ textAlign: "center" }}>
+          <Turntable variant="join" spinning={false} />
 
-        <div className="studio-join-record">
-          <StudioTurntable
-            mode="join"
-            spinning={false}
-          />
-
-          <div className="studio-join-record-label">
-            NEEDLE
-            <br />
-            DROP
-          </div>
-        </div>
-
-        {/* RIGHT FORM */}
-
-        <div className="studio-join-panel">
-          <div className="studio-panel-header">
-            <span>01</span>
-
-            <h2>
-              ENTER THE ROOM
-            </h2>
-          </div>
-
-          <form
-            onSubmit={handleJoin}
-            autoComplete="off"
-          >
-            {/* ROOM CODE */}
-
-            <div className="studio-field studio-room-code-field">
-              <label htmlFor="code">
-                ROOM CODE
-              </label>
-
-              <input
-                id="code"
-                type="text"
-                value={code}
-                onChange={(e) =>
-                  setCode(
-                    e.target.value
-                      .toUpperCase()
-                      .replace(
-                        /[^A-Z0-9]/g,
-                        ""
-                      )
-                  )
-                }
-                placeholder="7F3K"
-                maxLength={4}
-                autoFocus
-                spellCheck="false"
-                autoComplete="off"
-                className="studio-room-code-input"
-              />
-
-              <p className="studio-field-hint">
-                Ask your host for the
-                4-character room code.
+          {stage === "found" ? (
+            <>
+              <h1 className="section-title">Room found</h1>
+              <p className="hint">Entering room…</p>
+            </>
+          ) : (
+            <>
+              <h1 className="section-title">Enter the Room</h1>
+              <p className="subtitle" style={{ margin: "0 auto 24px" }}>
+                Ask your host for the 4-letter room code.
               </p>
-            </div>
 
-            {/* NAME */}
-
-            <div className="studio-field">
-              <label htmlFor="name">
-                YOUR NAME
-              </label>
-
-              <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) =>
-                  setName(e.target.value)
-                }
-                placeholder="What should we call you?"
-                maxLength={20}
-                autoComplete="nickname"
-              />
-            </div>
-
-            {/* JOIN */}
-
-            <button
-              type="submit"
-              className="studio-primary-button studio-primary-button--full studio-primary-button--join"
-              disabled={
-                joining ||
-                !code.trim() ||
-                !name.trim()
-              }
-            >
-              ENTER THE CLUB →
-            </button>
-          </form>
-
-          <div className="studio-join-tip">
-            <span>TIP</span>
-
-            <p>
-              Use the same name your friends
-              will recognize on the leaderboard.
-            </p>
-          </div>
-
-          <Link
-            to="/"
-            className="studio-back-link"
-          >
-            ← BACK TO HOME
-          </Link>
+              <form onSubmit={handleJoin} style={{ textAlign: "left" }}>
+                <label htmlFor="code">Room code</label>
+                <input
+                  id="code"
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="A B 7 K 2"
+                  maxLength={4}
+                  disabled={joining}
+                  className="room-code-input-field"
+                  style={{
+                    marginBottom: 16,
+                    letterSpacing: "0.35em",
+                    textAlign: "center",
+                    fontFamily: "var(--mono)",
+                    fontSize: "1.6rem",
+                    fontWeight: 700,
+                  }}
+                  autoFocus
+                />
+                <label htmlFor="name">Your name</label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="What should we call you?"
+                  maxLength={20}
+                  disabled={joining}
+                  style={{ marginBottom: 20 }}
+                />
+                <button
+                  className="console-btn console-btn--ghost console-btn--block"
+                  style={{
+                    borderColor: "rgba(185, 138, 245, 0.5)",
+                    color: "var(--studio-violet)",
+                  }}
+                  disabled={joining}
+                >
+                  {stage === "connecting" ? "Connecting…" : "Enter room →"}
+                </button>
+                {error && <p className="error-text">{error}</p>}
+              </form>
+            </>
+          )}
         </div>
+
+        {stage === "idle" && (
+          <Link to="/" className="hint" style={{ marginTop: 20, display: "inline-block" }}>
+            ← Back
+          </Link>
+        )}
       </div>
-    </StudioScene>
+    </div>
   );
 }
