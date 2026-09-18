@@ -16,23 +16,13 @@ function loadSdkScript() {
   return sdkLoadPromise;
 }
 
-/**
- * Creates and connects a Spotify.Player instance for this browser tab.
- * Used by the host's device (local mode) AND, for remote mode, by each
- * player's own device — deviceName lets each show up distinctly in Spotify.
- * Requires the connected account to have Spotify Premium.
- */
-export async function createHostPlayer({
-  onReady,
-  onStateChanged,
-  onError,
-  onAutoplayFailed,
-  deviceName = "Needle Drop (Guess the Song)",
-}) {
+// Creates and connects a Spotify.Player instance for the host's browser tab.
+// Requires the host to have Spotify Premium.
+export async function createHostPlayer({ onReady, onStateChanged, onError }) {
   const Spotify = await loadSdkScript();
 
   const player = new Spotify.Player({
-    name: deviceName,
+    name: "Needle Drop (Guess the Song)",
     getOAuthToken: async (cb) => {
       try {
         const { accessToken } = await api.getToken();
@@ -51,11 +41,51 @@ export async function createHostPlayer({
   player.addListener("account_error", () =>
     onError?.("Spotify Premium is required to play snippets from this app.")
   );
-  player.addListener("playback_error", ({ message }) => onError?.(message));
-  // Not all SDK versions emit this, but wire it up when they do — browsers
-  // increasingly block audio until the user has interacted with the page.
+  if (onStateChanged) player.addListener("player_state_changed", onStateChanged);
+
+  await player.connect();
+  return player;
+}
+
+// Creates and connects an independent Spotify.Player instance for a single
+// player's own browser/device in a remote multiplayer room. Each call
+// creates a fully separate device — playback on one never affects another.
+// Requires that player to individually have Spotify Premium.
+//
+// Distinct from createHostPlayer only in: a per-player device name, and a
+// richer error-event surface (playback_error, autoplay_failed) since a
+// remote player's browser is far more likely to hit autoplay restrictions
+// than the host's, who explicitly clicks "Create room" first.
+export async function createPlayerClient({ playerName, onReady, onStateChanged, onError }) {
+  const Spotify = await loadSdkScript();
+
+  const player = new Spotify.Player({
+    name: `Needle Drop — ${playerName || "Player"}`,
+    getOAuthToken: async (cb) => {
+      try {
+        const { accessToken } = await api.getToken();
+        cb(accessToken);
+      } catch (err) {
+        onError?.(err.message || "Failed to refresh Spotify token.", "authentication_error");
+      }
+    },
+    volume: 0.8,
+  });
+
+  player.addListener("ready", ({ device_id }) => onReady?.(device_id));
+  player.addListener("not_ready", () => onError?.("Playback device went offline.", "not_ready"));
+  player.addListener("initialization_error", ({ message }) =>
+    onError?.(message, "initialization_error")
+  );
+  player.addListener("authentication_error", ({ message }) =>
+    onError?.(message, "authentication_error")
+  );
+  player.addListener("account_error", () =>
+    onError?.("Spotify Premium is required to hear rounds in this app.", "account_error")
+  );
+  player.addListener("playback_error", ({ message }) => onError?.(message, "playback_error"));
   player.addListener("autoplay_failed", () =>
-    onAutoplayFailed?.("Tap Activate Spotify to enable playback in this browser.")
+    onError?.("Tap Activate Spotify to enable playback.", "autoplay_failed")
   );
   if (onStateChanged) player.addListener("player_state_changed", onStateChanged);
 

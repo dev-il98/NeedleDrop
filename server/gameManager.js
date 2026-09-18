@@ -1,5 +1,4 @@
 import { isCorrectGuess } from "./matcher.js";
-import { randomUUID } from "crypto";
 
 const GUESS_WINDOW_MS = 12_000; // how long players have to answer per round
 const ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no confusing chars
@@ -38,7 +37,6 @@ function publicPlayers(room) {
     name: p.name,
     score: p.score,
     connected: p.connected,
-    spotifyReady: !!p.spotifyReady,
   }));
 }
 
@@ -62,11 +60,6 @@ function trackChoices(room) {
   }));
 }
 
-// [ND SPOTIFY] safe diagnostic logger — never logs tokens/secrets.
-function logSpotify(info) {
-  console.log("[ND SPOTIFY]", JSON.stringify(info));
-}
-
 export function registerGameHandlers(io, socket) {
   // ---------- HOST: create room ----------
   socket.on("host:create-room", ({ mode, tracks, totalRounds, snippetMs }, ack) => {
@@ -77,7 +70,6 @@ export function registerGameHandlers(io, socket) {
     const room = {
       code,
       hostSocketId: socket.id,
-      hostDisconnectTimer: null,
       mode: mode === "remote" ? "remote" : "local",
       tracks: shuffle(tracks),
       trackIndex: 0,
@@ -96,76 +88,34 @@ export function registerGameHandlers(io, socket) {
     ack?.({ ok: true, roomCode: code });
   });
 
-  // ---------- PLAYER: join room (also used to rejoin after a reconnect) ----------
-  socket.on("player:join-room", ({ code, name, playerId }, ack) => {
+  // ---------- PLAYER: join room ----------
+  socket.on("player:join-room", ({ code, name }, ack) => {
     const room = rooms.get((code || "").toUpperCase());
     if (!room) return ack?.({ ok: false, error: "Room not found." });
     if (room.status === "ended")
       return ack?.({ ok: false, error: "This game has already ended." });
 
-    // A returning player (socket reconnected, e.g. phone locked briefly)
-    // sends back the same playerId we gave them, so they reclaim their
-    // existing score instead of joining as a brand-new player.
-    const existing = playerId ? room.players.get(playerId) : null;
-    const effectiveId = existing ? playerId : randomUUID();
-
-    if (existing) {
-      existing.socketId = socket.id;
-      existing.connected = true;
-      if (name && name.trim()) existing.name = name.trim().slice(0, 20);
-    } else {
-      const trimmedName = (name || "Player").trim().slice(0, 20) || "Player";
-      room.players.set(effectiveId, {
-        id: effectiveId,
-        socketId: socket.id,
-        name: trimmedName,
-        score: 0,
-        connected: true,
-        spotifyReady: false,
-        deviceId: null,
-      });
-    }
-
+    const trimmedName = (name || "Player").trim().slice(0, 20) || "Player";
+    room.players.set(socket.id, {
+      id: socket.id,
+      name: trimmedName,
+      score: 0,
+      connected: true,
+    });
     socket.join(room.code);
     socket.data.roomCode = room.code;
     socket.data.role = "player";
-    socket.data.playerId = effectiveId;
 
     ack?.({
       ok: true,
       roomCode: room.code,
       mode: room.mode,
       status: room.status,
-      playerId: effectiveId,
       players: publicPlayers(room),
       trackChoices: trackChoices(room),
     });
 
     io.to(room.code).emit("room:players-updated", publicPlayers(room));
-  });
-
-  // ---------- PLAYER: their own Spotify Web Playback SDK is ready ----------
-  // NEW: part of remote per-player playback. The device ID never leaves this
-  // player's own browser/server pairing — it's only used so THIS player's
-  // client can target its own device when told to play a track. The server
-  // never uses it to control anyone else's playback.
-  socket.on("player:spotify-ready", ({ deviceId }, ack) => {
-    const room = rooms.get(socket.data.roomCode);
-    if (!room || socket.data.role !== "player") return ack?.({ ok: false });
-    const player = room.players.get(socket.data.playerId);
-    if (!player) return ack?.({ ok: false });
-
-    player.deviceId = deviceId || null;
-    player.spotifyReady = !!deviceId;
-    logSpotify({
-      player: player.name,
-      deviceId: deviceId ? "(set)" : null,
-      event: "player:spotify-ready",
-      status: player.spotifyReady ? "ready" : "cleared",
-    });
-
-    io.to(room.code).emit("room:players-updated", publicPlayers(room));
-    ack?.({ ok: true });
   });
 
   // ---------- HOST: start game / advance rounds ----------
@@ -186,8 +136,9 @@ export function registerGameHandlers(io, socket) {
   });
 
   // Host's browser has played the snippet + auto-paused; open guessing.
-  // (Local mode only — remote mode opens guessing on a server timer instead,
-  // since there's no single host device to report back.)
+  // LOCAL MODE ONLY — remote mode opens guessing on its own server-side
+  // timer instead (see startNextRound), since there's no host device to
+  // wait on. This handler and its wiring are unchanged from before.
   socket.on("host:snippet-played", (_payload, ack) => {
     const room = getHostRoom(socket);
     if (!room || !room.currentRound) return ack?.({ ok: false });
@@ -208,9 +159,8 @@ export function registerGameHandlers(io, socket) {
     if (!room || !room.currentRound || room.status !== "guessing") {
       return ack?.({ ok: false, error: "No active round to guess on." });
     }
-    const playerId = socket.data.playerId;
     const round = room.currentRound;
-    if (round.correctGuessers.has(playerId)) {
+    if (round.correctGuessers.has(socket.id)) {
       return ack?.({ ok: false, error: "You already guessed correctly." });
     }
 
@@ -220,8 +170,8 @@ export function registerGameHandlers(io, socket) {
       const points = Math.round(
         scoreForElapsed(elapsedMs) * difficultyMultiplier(round.snippetMs)
       );
-      round.correctGuessers.add(playerId);
-      const player = room.players.get(playerId);
+      round.correctGuessers.add(socket.id);
+      const player = room.players.get(socket.id);
       if (player) player.score += points;
 
       io.to(room.code).emit("room:players-updated", publicPlayers(room));
@@ -237,46 +187,20 @@ export function registerGameHandlers(io, socket) {
     }
   });
 
-  // Lets the host's browser reclaim its room after a brief disconnect (e.g.
-  // switching tabs can momentarily drop the socket) instead of losing the
-  // room entirely.
-  socket.on("host:rejoin-room", ({ roomCode }, ack) => {
-    const room = rooms.get((roomCode || "").toUpperCase());
-    if (!room) return ack?.({ ok: false, error: "Room not found." });
-
-    if (room.hostDisconnectTimer) {
-      clearTimeout(room.hostDisconnectTimer);
-      room.hostDisconnectTimer = null;
-    }
-    room.hostSocketId = socket.id;
-    socket.join(room.code);
-    socket.data.roomCode = room.code;
-    socket.data.role = "host";
-    ack?.({ ok: true, status: room.status, players: publicPlayers(room) });
-  });
-
   // ---------- Disconnect handling ----------
   socket.on("disconnect", () => {
     const code = socket.data.roomCode;
     const room = rooms.get(code);
     if (!room) return;
 
-    if (socket.data.role === "host" && room.hostSocketId === socket.id) {
-      room.hostSocketId = null;
-      room.hostDisconnectTimer = setTimeout(() => {
-        if (!room.hostSocketId) {
-          io.to(code).emit("room:host-disconnected");
-          clearGuessTimer(room);
-          clearRoundTimer(room);
-          rooms.delete(code);
-        }
-      }, 30_000);
-    } else if (socket.data.role === "player" && room.players.has(socket.data.playerId)) {
-      const player = room.players.get(socket.data.playerId);
-      if (player.socketId === socket.id) {
-        player.connected = false;
-        io.to(code).emit("room:players-updated", publicPlayers(room));
-      }
+    if (socket.data.role === "host") {
+      io.to(code).emit("room:host-disconnected");
+      clearGuessTimer(room);
+      rooms.delete(code);
+    } else if (room.players.has(socket.id)) {
+      const player = room.players.get(socket.id);
+      player.connected = false;
+      io.to(code).emit("room:players-updated", publicPlayers(room));
     }
   });
 }
@@ -294,24 +218,39 @@ function clearGuessTimer(room) {
   }
 }
 
-function clearRoundTimer(room) {
-  if (room.roundTimer) {
-    clearTimeout(room.roundTimer);
-    room.roundTimer = null;
-  }
-}
-
 function scoreForElapsed(elapsedMs) {
+  // Fast, correct answers score more. Floors out at 100.
   const seconds = elapsedMs / 1000;
   return Math.max(100, Math.round(1000 - seconds * 75));
 }
 
+// Shorter snippets are harder to guess from, so they're worth more.
 function difficultyMultiplier(snippetMs) {
   if (snippetMs <= 1000) return 2.0;
   if (snippetMs <= 2000) return 1.5;
   if (snippetMs <= 3000) return 1.2;
   if (snippetMs <= 5000) return 1.0;
   return 0.7;
+}
+
+// Opens the guess window and schedules the reveal. Shared by local mode
+// (triggered by host:snippet-played, once the host's device finishes
+// playing) and remote mode (triggered by startNextRound's own timer,
+// once each player's own device should have finished playing).
+function openGuessing(io, room) {
+  if (!room.currentRound) return;
+  room.status = "guessing";
+  room.currentRound.guessingOpenedAt = Date.now();
+
+  io.to(room.code).emit("round:guessing-open", {
+    ...currentRoundPublicInfo(room),
+    guessWindowMs: GUESS_WINDOW_MS,
+  });
+
+  clearGuessTimer(room);
+  room.guessTimer = setTimeout(() => {
+    revealRound(io, room);
+  }, GUESS_WINDOW_MS);
 }
 
 function startNextRound(io, room) {
@@ -331,8 +270,9 @@ function startNextRound(io, room) {
     correctGuessers: new Set(),
   };
 
-  // Host always gets the track (needs the URI to play it locally too, and
-  // to show "now playing" in the control room UI either way).
+  // Host gets the actual track info (needs the URI to play it, in local
+  // mode; in remote mode the host still sees it for their own control-room
+  // display, but does not play it).
   io.to(room.hostSocketId).emit("round:prepare", {
     roundNumber: room.roundNumber,
     totalRounds: room.totalRounds,
@@ -347,50 +287,37 @@ function startNextRound(io, room) {
   });
 
   if (room.mode === "remote") {
-    // NEW: remote per-player playback. Each ready player's own browser uses
-    // its own Spotify session + device to play this track — the server
-    // never touches anyone's access token, only relays the track URI (which
-    // is an opaque ID, not a spoiler) and a snippet length.
-    io.to(room.code).except(room.hostSocketId).emit("round:play-track", {
-      trackUri: track.uri,
-      roundNumber: room.roundNumber,
-      totalRounds: room.totalRounds,
-      snippetMs: room.currentRound.snippetMs,
-    });
-
-    // No single host device to report "snippet finished" in remote mode, so
-    // the server itself opens guessing after the snippet duration elapses.
-    clearRoundTimer(room);
-    room.roundTimer = setTimeout(() => {
-      openGuessing(io, room);
-    }, room.currentRound.snippetMs);
+    // No host device is involved in remote mode: each player's own
+    // Spotify Web Playback SDK instance plays the track on their own
+    // device. The server drives timing directly instead of waiting on
+    // host:snippet-played, which only fires in local mode.
+    //
+    // Note: unlike round:starting, this necessarily includes the track
+    // URI, since each player's own browser needs it to start playback.
+    // That's an inherent tradeoff of per-player remote playback (Solo
+    // mode already has the same property — the client always holds the
+    // URI it's playing), not a new class of answer-leak introduced here.
+    clearGuessTimer(room);
+    room.guessTimer = setTimeout(() => {
+      console.log(
+        `[ND SPOTIFY] room: ${room.code} round: ${room.roundNumber} event: play-track status: sent-to-players`
+      );
+      io.to(room.code).except(room.hostSocketId).emit("round:play-track", {
+        roundNumber: room.roundNumber,
+        totalRounds: room.totalRounds,
+        trackUri: track.uri,
+        snippetMs: room.currentRound.snippetMs,
+      });
+      room.guessTimer = setTimeout(() => {
+        openGuessing(io, room);
+      }, room.currentRound.snippetMs);
+    }, 900); // brief beat so the "starting" UI is visible before it plays
   }
-}
-
-function openGuessing(io, room) {
-  if (!room.currentRound || room.status === "guessing") return;
-  clearRoundTimer(room);
-
-  room.status = "guessing";
-  room.currentRound.guessingOpenedAt = Date.now();
-
-  io.to(room.code).emit("round:guessing-open", {
-    roundNumber: room.roundNumber,
-    totalRounds: room.totalRounds,
-    snippetMs: room.currentRound.snippetMs,
-    guessWindowMs: GUESS_WINDOW_MS,
-  });
-
-  clearGuessTimer(room);
-  room.guessTimer = setTimeout(() => {
-    revealRound(io, room);
-  }, GUESS_WINDOW_MS);
 }
 
 function revealRound(io, room) {
   if (!room.currentRound) return;
   clearGuessTimer(room);
-  clearRoundTimer(room);
   room.status = "reveal";
   const round = room.currentRound;
 
