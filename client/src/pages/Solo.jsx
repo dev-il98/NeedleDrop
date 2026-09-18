@@ -152,7 +152,7 @@ export default function Solo() {
           setPlayerError("Couldn't pause playback: " + err.message);
         }
         setIsPlayingSnippet(false);
-        openGuessing(track);
+        openGuessing();
       }, snippetMs || 1000);
     } catch (err) {
       setIsPlayingSnippet(false);
@@ -160,7 +160,7 @@ export default function Solo() {
     }
   }
 
-  function openGuessing(track) {
+  function openGuessing() {
     setPhase("guessing");
     setGuessingOpenedAt(Date.now());
     setTimeLeftPct(100);
@@ -172,7 +172,7 @@ export default function Solo() {
       setTimeLeftPct(pct);
       if (pct <= 0) {
         clearTimer();
-        revealRound(null, track);
+        revealRound(null);
       }
     }, 100);
   }
@@ -195,16 +195,16 @@ export default function Solo() {
       const points = Math.round(scoreForElapsed(elapsedMs) * difficultyMultiplier(snippetMs));
       setScore((s) => s + points);
       setFeedback({ correct: true, points });
-      revealRound(points, currentTrack);
+      revealRound(points);
     } else {
       setFeedback({ correct: false });
     }
   }
 
-  function revealRound(points, track) {
+  function revealRound(points) {
     clearTimer();
     setRevealInfo({
-      track: track || currentTrack,
+      track: currentTrack,
       gotItRight: points != null,
       points: points || 0,
     });
@@ -267,7 +267,7 @@ export default function Solo() {
               Connect your Spotify account to play by yourself — no room, no
               friends needed. You'll need Spotify Premium for playback.
             </p>
-            <a href={api.loginUrl()} className="console-btn console-btn--neon console-btn--block">
+            <a href={api.loginUrl("/solo")} className="console-btn console-btn--neon console-btn--block">
               Connect Spotify
             </a>
             {connectError && <p className="error-text">{connectError}</p>}

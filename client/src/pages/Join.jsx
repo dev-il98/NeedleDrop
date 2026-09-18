@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getSocket } from "../lib/socket";
+import { savePlayerSession } from "../lib/playerSession";
 import Turntable from "../components/Turntable";
 import AmbientParticles from "../components/AmbientParticles";
 import "../components/game-ui.css";
@@ -38,15 +39,15 @@ export default function Join() {
           return;
         }
         setStage("found");
+        const session = {
+          name: name.trim(),
+          roomCode: res.roomCode,
+          playerId: res.playerId || playerId,
+          trackChoices: res.trackChoices || [],
+        };
+        savePlayerSession(session);
         setTimeout(() => {
-          navigate("/play", {
-            state: {
-              name: name.trim(),
-              roomCode: res.roomCode,
-              playerId: res.playerId || playerId,
-              trackChoices: res.trackChoices || [],
-            },
-          });
+          navigate("/play", { state: session });
         }, ENTER_TRANSITION_MS);
       }
     );

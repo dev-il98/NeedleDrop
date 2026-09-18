@@ -42,7 +42,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 // This data changes based on login state and must never be cached by the
-// browser or any intermediate proxy — a cached 304 here is what was causing
+// browser or any intermediate proxy — a cached 304 here previously caused
 // "connected: false" to stick around even after a successful login.
 app.use("/auth", (req, res, next) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
@@ -57,19 +57,30 @@ const io = new SocketIOServer(server, {
   cors: { origin: CLIENT_URL, credentials: true },
 });
 
+// Paths we allow redirecting back to after Spotify login — keeps this from
+// being usable as an open redirect.
+const ALLOWED_RETURN_PATHS = new Set(["/host", "/play", "/solo"]);
+
 // ---------- Auth ----------
 
 app.get("/auth/login", (req, res) => {
   const stateSessionId = nanoid(); // used only as OAuth "state" for CSRF protection
   res.cookie("oauth_state", stateSessionId, cookieOptions);
+
+  const requestedReturnTo = req.query.return_to;
+  const returnTo = ALLOWED_RETURN_PATHS.has(requestedReturnTo) ? requestedReturnTo : "/host";
+  res.cookie("return_to", returnTo, cookieOptions);
+
   res.redirect(getLoginUrl(stateSessionId));
 });
 
 app.get("/auth/callback", async (req, res) => {
   const { code, state, error } = req.query;
-  if (error) return res.redirect(`${CLIENT_URL}/host?error=${encodeURIComponent(error)}`);
+  const returnTo = ALLOWED_RETURN_PATHS.has(req.cookies.return_to) ? req.cookies.return_to : "/host";
+
+  if (error) return res.redirect(`${CLIENT_URL}${returnTo}?error=${encodeURIComponent(error)}`);
   if (!code || !state || state !== req.cookies.oauth_state) {
-    return res.redirect(`${CLIENT_URL}/host?error=state_mismatch`);
+    return res.redirect(`${CLIENT_URL}${returnTo}?error=state_mismatch`);
   }
 
   try {
@@ -79,14 +90,15 @@ app.get("/auth/callback", async (req, res) => {
       ...cookieOptions,
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     });
-    // Also hand the session id back via the URL as a fallback: some mobile
-    // browsers block cross-site cookies even with sameSite:none, which would
-    // silently break auth for a frontend/backend split across two domains.
-    // The client stores this in localStorage and sends it as a header.
-    res.redirect(`${CLIENT_URL}/host?connected=1&sid=${sessionId}`);
+    // Also hand the session id back via the URL as a fallback: some browsers
+    // block cross-site cookies even with sameSite:none, which would silently
+    // break auth for a frontend/backend split across two domains. The client
+    // stores this in sessionStorage (tab-scoped, so a host tab and a player
+    // tab on the same computer never collide) and sends it as a header.
+    res.redirect(`${CLIENT_URL}${returnTo}?connected=1&sid=${sessionId}`);
   } catch (err) {
     console.error("OAuth callback failed:", err.response?.data || err.message);
-    res.redirect(`${CLIENT_URL}/host?error=token_exchange_failed`);
+    res.redirect(`${CLIENT_URL}${returnTo}?error=token_exchange_failed`);
   }
 });
 
@@ -99,14 +111,11 @@ function getSid(req) {
 
 app.get("/auth/status", (req, res) => {
   const sid = getSid(req);
-  // TEMP DEBUG: confirms whether Railway is actually running this exact file.
-  // Remove once confirmed.
-  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
-  res.set("X-Debug-Version", "v2-test");
   res.json({ connected: !!sid && hasSession(sid) });
 });
 
-// Gives the host's browser a fresh access token for the Web Playback SDK.
+// Gives the caller's browser a fresh access token for the Web Playback SDK.
+// Used by the host's device AND, for remote mode, each player's own device.
 app.get("/auth/token", async (req, res) => {
   const sid = getSid(req);
   if (!sid) return res.status(401).json({ error: "Not connected to Spotify." });
